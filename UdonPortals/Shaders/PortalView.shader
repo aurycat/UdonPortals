@@ -66,23 +66,23 @@
 
 Shader "Aurycat/PortalView"
 {
-    Properties
-    {
-        [HideInInspector] _ViewTexL("_ViewTexL", 2D) = "black" {}
-        [HideInInspector] _ViewTexR("_ViewTexR", 2D) = "black" {}
+	Properties
+	{
+		[HideInInspector] _ViewTexL("_ViewTexL", 2D) = "black" {}
+		[HideInInspector] _ViewTexR("_ViewTexR", 2D) = "black" {}
 		[Enum(UnityEngine.Rendering.CullMode)] _Cull ("Cull", Float) = 2
-    }
-    SubShader
-    {
-        Tags
+	}
+	SubShader
+	{
+		Tags
 		{
-            "RenderType"="Opaque"
+			"RenderType"="Opaque"
 
 			// Queue should be between background surfaces
 			// (e.g. wall behind the portal) and avatar queues
 			// which are normally Geometry (2000) and above.
-            "Queue"="Geometry-100"
-        }
+			"Queue"="Geometry-100"
+		}
 
 		Cull [_Cull]
 
@@ -103,7 +103,7 @@ Shader "Aurycat/PortalView"
 			sampler2D _ViewTexL;
 			sampler2D _ViewTexR;
 
-			struct appdata 
+			struct appdata
 			{
 				float4 vertex : POSITION;
 				float2 uv : TEXCOORD0;
@@ -203,5 +203,5 @@ Shader "Aurycat/PortalView"
 			}
 			ENDCG
 		}
-    }
+	}
 }

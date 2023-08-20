@@ -5,7 +5,7 @@ using UnityEditor;
 
 [CustomEditor(typeof(PortalBehaviour))]
 [CanEditMultipleObjects]
-public class PortalBehaviourEditor : Editor 
+public class PortalBehaviourEditor : Editor
 {
 	SerializedProperty partnerProp;
 	SerializedProperty referenceCameraProp;
@@ -42,8 +42,8 @@ public class PortalBehaviourEditor : Editor
 		manualStereoSeparationProp = serializedObject.FindProperty("manualStereoSeparation");
 	}
 
-    public override void OnInspectorGUI()
-    {
+	public override void OnInspectorGUI()
+	{
 		GUIStyle style = new GUIStyle(GUI.skin.label);
 		style.wordWrap = true;
 		style.richText = true;
@@ -104,20 +104,20 @@ public class PortalBehaviourEditor : Editor
 			new GUIContent("Partner Portal"));
 		if (!serializedObject.isEditingMultipleObjects && partnerProp.objectReferenceValue == null) {
 			EditorGUILayout.HelpBox("A partner transform is required. Usually you should set this another portal object.", MessageType.Error);
-			GUILayout.Space(10); 
+			GUILayout.Space(10);
 		}
-			
+
 		EditorGUILayout.PropertyField(referenceCameraProp);
 		if (!serializedObject.isEditingMultipleObjects && referenceCameraProp.objectReferenceValue == null) {
 			EditorGUILayout.HelpBox("Set this to your world's reference camera (Main Camera).", MessageType.Warning);
-			GUILayout.Space(10); 
+			GUILayout.Space(10);
 		}
 
 		EditorGUILayout.PropertyField(layerMaskProp);
 		EditorGUILayout.PropertyField(textureResolutionProp);
 		EditorGUILayout.PropertyField(callbackScriptProp);
 
-		GUILayout.Space(10); 
+		GUILayout.Space(10);
 		showAdvanced = EditorGUILayout.Foldout(showAdvanced, "Advanced", true);
 		if (showAdvanced) {
 			EditorGUI.indentLevel++;
@@ -142,14 +142,14 @@ public class PortalBehaviourEditor : Editor
 			EditorGUILayout.PropertyField(trackingScaleProp);
 			EditorGUILayout.PropertyField(manualStereoSeparationProp);
 			GUILayout.EndVertical();
-			
+
 			EditorGUI.indentLevel--;
 		}
 		GUILayout.Space(5);
 
 		serializedObject.ApplyModifiedProperties();
-    }
-   
+	}
+
 	void GenerateRenderTextures()
 	{
 		foreach(PortalBehaviour p in targets) {
