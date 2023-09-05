@@ -7,7 +7,7 @@ This prefab lets you create visual portals in VRChat worlds that can be looked t
 
 ## Download
 
-### [Download the latest unitypackage here.](https://gitlab.com/aurycat/UdonPortals/-/raw/releases/UdonPortals-v1.0.unitypackage)
+### [Download the latest unitypackage here.](https://gitlab.com/aurycat/UdonPortals/-/raw/releases/UdonPortals-v1.2.unitypackage)
 
 Or view all releases [here](https://gitlab.com/aurycat/UdonPortals/-/releases).
 

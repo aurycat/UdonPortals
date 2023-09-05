@@ -21,8 +21,12 @@ public class PortalBehaviourEditor : Editor
 	SerializedProperty stereoSeparationModeProp;
 	SerializedProperty trackingScaleProp;
 	SerializedProperty manualStereoSeparationProp;
+	SerializedProperty noVisualsProp;
+	SerializedProperty useObliqueProjectionProp;
+	SerializedProperty portalCameraRootProp;
 
 	static bool showAdvanced;
+	static bool showExtraAdvanced;
 
 	void OnEnable()
 	{
@@ -40,6 +44,9 @@ public class PortalBehaviourEditor : Editor
 		stereoSeparationModeProp = serializedObject.FindProperty("stereoSeparationMode");
 		trackingScaleProp = serializedObject.FindProperty("trackingScale");
 		manualStereoSeparationProp = serializedObject.FindProperty("manualStereoSeparation");
+		noVisualsProp = serializedObject.FindProperty("noVisuals");
+		useObliqueProjectionProp = serializedObject.FindProperty("_useObliqueProjection");
+		portalCameraRootProp = serializedObject.FindProperty("portalCameraRoot");
 	}
 
 	public override void OnInspectorGUI()
@@ -117,30 +124,89 @@ public class PortalBehaviourEditor : Editor
 		EditorGUILayout.PropertyField(textureResolutionProp);
 		EditorGUILayout.PropertyField(callbackScriptProp);
 
-		GUILayout.Space(10);
+		GUILayout.Space(5);
 		showAdvanced = EditorGUILayout.Foldout(showAdvanced, "Advanced", true);
 		if (showAdvanced) {
 			EditorGUI.indentLevel++;
+			EditorGUILayout.HelpBox("Hover your mouse over each property name to see information about its usage.", MessageType.Info);
+			GUILayout.Space(10);
 			EditorGUILayout.PropertyField(clipPlaneOffsetProp);
 			EditorGUILayout.PropertyField(teleportPlaneOffsetProp);
+			EditorGUILayout.PropertyField(noVisualsProp);
 			EditorGUILayout.PropertyField(viewTexLProp);
 			EditorGUILayout.PropertyField(viewTexRProp);
-			EditorGUILayout.PropertyField(portalCameraPrefabProp);
-			EditorGUILayout.PropertyField(trackingScalePrefabProp);
+			EditorGUI.indentLevel--;
+		}
+
+		GUILayout.Space(5);
+		showExtraAdvanced = EditorGUILayout.Foldout(showExtraAdvanced, "Extra Advanced", true);
+		if (showExtraAdvanced) {
+			EditorGUI.indentLevel++;
+
+			GUILayout.Space(5);
+			GUILayout.BeginVertical("box");
+			GUILayout.Space(5);
+			EditorGUILayout.HelpBox(
+				"Using oblique projection can interfere with some shader effects such " +
+				"as caustics in water. REGARDLESS, you should probably leave this enabled. " +
+				"Read the pros & cons above the 'useObliqueProjection' property " +
+				"in PortalBehavior.cs before changing this.",
+				MessageType.Info);
+			GUILayout.Space(5);
+			EditorGUILayout.PropertyField(useObliqueProjectionProp);
+			if (!serializedObject.isEditingMultipleObjects) {
+				if (useObliqueProjectionProp.boolValue != true) {
+					EditorGUILayout.HelpBox("This setting is not at its default value. The portal may not function as expected!", MessageType.Warning);
+					GUILayout.Space(5);
+				}
+			}
+			GUILayout.Space(5);
+			GUILayout.EndVertical();
 
 			GUILayout.Space(15);
 			GUILayout.BeginVertical("box");
-			EditorGUILayout.LabelField(
+			GUILayout.Space(5);
+			EditorGUILayout.HelpBox(
 				"The following settings control stereo separation behaviour (aka IPD) in VR. " +
 				"If the portal is looking weird in VR (e.g. warping when you rotate " +
 				"your head), something may be wrong with stereo separation. If that " +
-				"happens, read the comment above the <i>stereoSeparationMode</i> property " +
-				"in PortalBehaviour.cs for more info. Otherwise, leave these settings alone!",
-				style);
+				"happens, read the comment above the 'stereoSeparationMode' property " +
+				"in PortalBehaviour.cs for more info. Otherwise, don't touch these!",
+				MessageType.Info);
 			GUILayout.Space(5);
 			EditorGUILayout.PropertyField(stereoSeparationModeProp);
 			EditorGUILayout.PropertyField(trackingScaleProp);
 			EditorGUILayout.PropertyField(manualStereoSeparationProp);
+			if (!serializedObject.isEditingMultipleObjects) {
+				if (stereoSeparationModeProp.intValue < 0 || stereoSeparationModeProp.intValue > 2) {
+					EditorGUILayout.HelpBox("Stereo Separation Mode must be between 0 and 2.", MessageType.Error);
+					GUILayout.Space(5);
+				}
+				else if (stereoSeparationModeProp.intValue != 0 || trackingScaleProp.objectReferenceValue != null) {
+					EditorGUILayout.HelpBox("These settings are not at their default value. You should probably not change these. Make sure to read the documentation for 'stereoSeparationMode' in PortalBehavior.cs if you do.", MessageType.Warning);
+					GUILayout.Space(5);
+				}
+			}
+			GUILayout.Space(5);
+			GUILayout.EndVertical();
+
+			GUILayout.Space(15);
+			GUILayout.BeginVertical("box");
+			GUILayout.Space(5);
+			EditorGUILayout.HelpBox(
+				"These are automatically set. You shouldn't change these.",
+				MessageType.Info);
+			GUILayout.Space(5);
+			EditorGUILayout.PropertyField(portalCameraPrefabProp);
+			EditorGUILayout.PropertyField(trackingScalePrefabProp);
+			EditorGUILayout.PropertyField(portalCameraRootProp);
+			if (!serializedObject.isEditingMultipleObjects) {
+				if (portalCameraRootProp.objectReferenceValue != null) {
+					EditorGUILayout.HelpBox("Portal Camera Root is automatically set to an instance of Portal Camera Prefab at runtime. Leave this unset unless you have a manually-instantiated version of the Portal Camera Prefab that you want to use for some reason.", MessageType.Warning);
+					GUILayout.Space(5);
+				}
+			}
+			GUILayout.Space(5);
 			GUILayout.EndVertical();
 
 			EditorGUI.indentLevel--;
@@ -173,7 +239,7 @@ public class PortalBehaviourEditor : Editor
 		RenderTextureDescriptor desc = new RenderTextureDescriptor(256, 256, RenderTextureFormat.ARGB32, 24);
 		desc.sRGB = false;
 		RenderTexture tex = new RenderTexture(desc);
-	    AssetDatabase.CreateAsset(tex, "Assets/PortalRenderTextures/" + name + ".renderTexture");
+		AssetDatabase.CreateAsset(tex, "Assets/PortalRenderTextures/" + name + ".renderTexture");
 		return tex;
 	}
 }

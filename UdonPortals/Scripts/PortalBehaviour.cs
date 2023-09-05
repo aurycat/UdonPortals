@@ -8,6 +8,15 @@
 //
 // Author: aurycat
 // License: MIT
+// History:
+//  1.0 (2023-01-12)
+//  1.1 (2023-08-20) Code formatting fixes.
+//  1.2 (2023-09-04) Fixed rendering issues in desktop mode introduced by Unity 2022
+//                   in the VRC open beta; fixed teleporting issues introduced by a
+//                   change in the behavior of VRCPlayerApi.GetRotation; improved
+//                   inspector editor UI; added noVisuals and useObliqueProjection
+//                   options; black out portals in VR as local player leaves instance
+//                   to prevent nauseating visuals.
 
 using UdonSharp;
 using UnityEngine;
@@ -176,7 +185,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 	 *        (1.0/trackingScale.localScale.x) * default_stereo_separation
 	 *     Also, if the 'trackingScale' property is set to null, the TrackingScale
 	 *     prefab is automatically instantiated at /PortalTrackingScale if it
-	 *     doesn't already exist and 'trackingScale' is set to that object.
+	 *     doesn't already exist. 'trackingScale' is then set to that object.
 	 *
 	 *  1: Stereo separation is computed as:
 	 *        trackingScale.localScale.x * default_stereo_separation
@@ -201,6 +210,51 @@ public class PortalBehaviour : UdonSharpBehaviour
 	}
 
 	/**
+	 * When true, the portal has the same teleporting behavior but does not
+	 * show any image or render anything or even create a camera. If all you
+	 * want is the physics/teleporting effect of the portal but not the
+	 * visuals, use this to save performance by not calculating camera stuff.
+	 *
+	 * The PortalBehavior component must be disabled and reenabled for changes
+	 * of this setting to take effect.
+	 */
+	[Tooltip("Disables all visual effects of the portal, only the physics & teleporting are applied. The object must be disabled and reenabled for changes to this setting to take effect.")]
+	public bool noVisuals = false;
+
+	/**
+	 * Normally portals use an "oblique projection matrix" to solve a problem
+	 * known as "Banana Juice". It's best described in this video by the team
+	 * that made the Portal games: https://youtu.be/ivyseNMVt-4&t=1064
+	 *
+	 * tl;dw when rendering the virtual portal camera, the entire world behind
+	 * the plane of the portal is clipped. Since this plane isn't necessarily
+	 * parallel to the view plane of the camera, an oblique near clipping plane
+	 * is used.
+	 *
+	 * The downside of using an oblique near clipping plane is it screws with
+	 * depth-buffer based effects when viewed through the portal. For example,
+	 * caustics in water shaders won't work (I believe it is resolvable by 
+	 * modifying the water shader to account for the oblique projection, but
+	 * I don't know how.)
+	 *
+	 * You can use this setting to disable the oblique projection matrix if
+	 * you need to.
+	 * IMPORTANT: Only enable this if there is nothing behind the partner
+	 * portal -- e.g. the partner portal is floating in air, or placed on an
+	 * external wall.
+	 */
+	[Tooltip("Read documentation for this setting in PortalBehaviour.cs")]
+	public bool _useObliqueProjection = true;
+	public bool useObliqueProjection {
+		get => _useObliqueProjection;
+		set { _UpdateUseObliqueProjection(value); }
+	}
+
+	// PortalCamera prefab instance.
+	[Tooltip("If not set, automatically set to an instance of portalCameraPrefab.")]
+	public Transform portalCameraRoot;
+
+	/**
 	 * These colliders will be disabled when the player is positioned
 	 * to "walk" through the portal. This includes any HORZIONTAL
 	 * approaches to the portal. You can use this to turn off walls
@@ -221,8 +275,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	// ---- PRIVATE PROPERTIES ----
 
-	// PortalCamera prefab instance.
-	private Transform portalCameraRoot;
+	private bool savePortalCameraRoot;
 
 	// This is the Transform of the "virtual" head, i.e. the player's head
 	// relative to the current portal's front-face, transformed to be relative
@@ -263,6 +316,15 @@ public class PortalBehaviour : UdonSharpBehaviour
 	// These cameras are used for obtaining VR rendering information, namely
 	// the projection matrix necessary for the HMD. They are positioned at the
 	// same place as the portal cameras, but aren't enabled and don't render.
+	//
+	// They are also used in VR and Desktop for determining the size of the
+	// screen, which is used to set the size of the RenderTextures.
+	//
+	// The dummyCameras are needed because the portalCameras, which do the
+	// actual rendering, are set to render to a RenderTexture. Unity adjusts
+	// certain properties of the camera when the target is a RenderTexture
+	// instead of the HMD or main display, which is undesirable. Therefore,
+	// properties from the dummy cameras are copied to the rendering cameras.
 	private Camera dummyCameraL;
 	private Camera dummyCameraR;
 
@@ -285,23 +347,30 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	// Local player cache
 	private VRCPlayerApi localPlayer;
+	private bool inVR;
+
+	// Cache of noVisuals that only changes at OnEnable
+	private bool _noVisuals;
+
 
 	void OnEnable()
 	{
+		_noVisuals = noVisuals;
+
 		/*
 		 * Validate properties.
 		 */
 
-		if (portalCameraPrefab == null) {
+		if (!_noVisuals && portalCameraPrefab == null) {
 			Debug.LogError($"Portal '{name}' does not have the Portal Camera Prefab property set. Please set it to the 'PortalCamera' prefab asset provided in the UdonPortals package.");
 			return;
 		} else if (partner == null) {
 			Debug.LogError($"Portal '{name}' does not have a partner transform set.");
 			return;
-		} else if (viewTexL == null || viewTexR == null) {
+		} else if (!_noVisuals && (viewTexL == null || viewTexR == null)) {
 			Debug.LogError($"Portal '{name}' does not have one or both of its View Tex properties set. Please set them to two separate RenderTextures, unique to this portal.");
 			return;
-		} else if (viewTexL == viewTexR) {
+		} else if (!_noVisuals && (viewTexL == viewTexR)) {
 			Debug.LogError($"Portal '{name}' has the same texture set for both View Tex L and View Tex R. Please set them to two separate RenderTextures, unique to this portal.");
 			return;
 		} else if (_textureResolution <= 0) {
@@ -309,21 +378,23 @@ public class PortalBehaviour : UdonSharpBehaviour
 			return;
 		}
 
-		renderer = GetComponent<Renderer>();
-		if (renderer != null) {
-			Material mat = renderer.material;
-			if (mat != null) {
-				if(!mat.HasProperty("_ViewTexL") || !mat.HasProperty("_ViewTexR")) {
-					Debug.LogError($"Portal '{name}' is set to material '{mat.name}' which does not have the _ViewTexL or _ViewTexR properties.");
+		if (!_noVisuals) {
+			renderer = GetComponent<Renderer>();
+			if (renderer != null) {
+				Material mat = renderer.material;
+				if (mat != null) {
+					if(!mat.HasProperty("_ViewTexL") || !mat.HasProperty("_ViewTexR")) {
+						Debug.LogError($"Portal '{name}' is set to material '{mat.name}' which does not have the _ViewTexL or _ViewTexR properties.");
+						return;
+					}
+				} else {
+					Debug.LogError($"Portal '{name}' does not have a material set on its Renderer.");
 					return;
 				}
 			} else {
-				Debug.LogError($"Portal '{name}' does not have a material set on its Renderer.");
+				Debug.LogError($"Portal '{name}' does not have a Renderer.");
 				return;
 			}
-		} else {
-			Debug.LogError($"Portal '{name}' does not have a Renderer.");
-			return;
 		}
 
 		trigger = GetComponent<Collider>();
@@ -332,76 +403,98 @@ public class PortalBehaviour : UdonSharpBehaviour
 			return;
 		}
 
-		if (trackingScale == null) {
-			if (stereoSeparationMode == 0) {
-				trackingScale = InstantiateTrackingScale();
-				if (trackingScale == null) {
-					Debug.LogError($"Portal '{name}' does not have the Tracking Scale Prefab property set and the GameObject /PortalTrackingScale doesn't exist in the scene. Please set Tracking Scale Prefab to the 'TrackingScale' prefab asset provided in the package.");
+		if (!_noVisuals) {
+			if (trackingScale == null) {
+				if (stereoSeparationMode == 0) {
+					trackingScale = InstantiateTrackingScale();
+					if (trackingScale == null) {
+						Debug.LogError($"Portal '{name}' does not have the Tracking Scale Prefab property set and the GameObject /PortalTrackingScale doesn't exist in the scene. Please set Tracking Scale Prefab to the 'TrackingScale' prefab asset provided in the package.");
+						return;
+					}
+				} else if (stereoSeparationMode == 1) {
+					Debug.LogError($"Portal '{name}' does not have the 'trackingScale' property set on stereoSeparationMode=1.");
 					return;
 				}
-			} else if (stereoSeparationMode == 1) {
-				Debug.LogError($"Portal '{name}' does not have the 'trackingScale' property set on stereoSeparationMode=1.");
-				return;
+			}
+
+			if (referenceCamera == null) {
+				Debug.LogWarning($"Portal '{name}' does not have a reference camera set.");
 			}
 		}
 
-		if (referenceCamera == null) {
-			Debug.LogWarning($"Portal '{name}' does not have a reference camera set.");
-		}
-
 
 		/*
-		 * Instantiate portal camera prefab.
+		 * Initialize player after all error conditions, to prevent
+		 * running OnWillRenderObject if there was an init error.
 		 */
 
-		if (portalCameraRoot == null) {
-			GameObject root = Instantiate(portalCameraPrefab);
-			root.name = name + "_Camera";
-			portalCameraRoot = root.transform;
+		localPlayer = Networking.LocalPlayer;
+		if (!Utilities.IsValid(localPlayer)) {
+			return;
 		}
+		inVR = localPlayer.IsUserInVR();
 
-		virtualHead = portalCameraRoot.Find("VirtualHead");
+		savePortalCameraRoot = false;
+		if (!_noVisuals) {
+			/*
+			 * Instantiate portal camera prefab.
+			 */
 
-		offsetL = virtualHead.Find("OffsetL");
-		invertRotationL = offsetL.Find("InvertRotationL");
-		invertPositionL = invertRotationL.Find("InvertPositionL");
-		dummyCameraL = invertPositionL.Find("DummyCameraL").GetComponent<Camera>();
-		portalCameraL = offsetL.Find("PortalCameraL").GetComponent<Camera>();
+			if (portalCameraRoot == null) {
+				GameObject root = Instantiate(portalCameraPrefab);
+				root.name = name + "_Camera";
+				portalCameraRoot = root.transform;
+			}
+			else {
+				savePortalCameraRoot = true;
+				portalCameraRoot.SetParent(null);
+			}
+			portalCameraRoot.gameObject.SetActive(true);
 
-		offsetR = virtualHead.Find("OffsetR");
-		invertRotationR = offsetR.Find("InvertRotationR");
-		invertPositionR = invertRotationR.Find("InvertPositionR");
-		dummyCameraR = invertPositionR.Find("DummyCameraR").GetComponent<Camera>();
-		portalCameraR = offsetR.Find("PortalCameraR").GetComponent<Camera>();
+			virtualHead = portalCameraRoot.Find("VirtualHead");
+
+			offsetL = virtualHead.Find("OffsetL");
+			invertRotationL = offsetL.Find("InvertRotationL");
+			invertPositionL = invertRotationL.Find("InvertPositionL");
+			dummyCameraL = invertPositionL.Find("DummyCameraL").GetComponent<Camera>();
+			portalCameraL = offsetL.Find("PortalCameraL").GetComponent<Camera>();
+
+			offsetR = virtualHead.Find("OffsetR");
+			invertRotationR = offsetR.Find("InvertRotationR");
+			invertPositionR = invertRotationR.Find("InvertPositionR");
+			dummyCameraR = invertPositionR.Find("DummyCameraR").GetComponent<Camera>();
+			portalCameraR = offsetR.Find("PortalCameraR").GetComponent<Camera>();
+
+			offsetR.gameObject.SetActive(inVR);
 
 
-		/*
-		 * Configure portal cameras.
-		 */
+			/*
+			 * Configure portal cameras.
+			 */
 
-		_ResetTransform(offsetL);
-		_ResetTransform(offsetR);
-		_ResetTransform(virtualHead);
+			_ResetTransform(offsetL);
+			_ResetTransform(offsetR);
+			_ResetTransform(virtualHead);
 
-		_ResetCamera(portalCameraL);
-		_ResetCamera(portalCameraR);
-		_ResetCamera(dummyCameraL);
-		_ResetCamera(dummyCameraR);
+			_ResetCamera(portalCameraL);
+			_ResetCamera(portalCameraR);
+			_ResetCamera(dummyCameraL);
+			_ResetCamera(dummyCameraR);
 
-		_UpdateLayerMask(_layerMask);
-		RefreshTextures();
+			_UpdateLayerMask(_layerMask);
 
-		renderer.material.SetTexture("_ViewTexL", viewTexL);
-		renderer.material.SetTexture("_ViewTexR", viewTexR);
+			RefreshTextures();
 
-		dummyCameraL.stereoTargetEye = StereoTargetEyeMask.Left;
-		_CopyCameraProperties(portalCameraL, dummyCameraL, Camera.StereoscopicEye.Left);
+			renderer.material.SetTexture("_ViewTexL", viewTexL);
 
-		if (dummyCameraL.stereoEnabled) {
-			dummyCameraR.stereoTargetEye = StereoTargetEyeMask.Right;
-			_CopyCameraProperties(portalCameraR, dummyCameraR, Camera.StereoscopicEye.Right);
-		} else {
-			offsetR.gameObject.SetActive(false);
+			if (inVR) {
+				renderer.material.SetTexture("_ViewTexR", viewTexR);
+
+				dummyCameraL.stereoTargetEye = StereoTargetEyeMask.Left;
+				dummyCameraR.stereoTargetEye = StereoTargetEyeMask.Right;
+				_ApplyDummyCameraProperties(portalCameraL, dummyCameraL, Camera.StereoscopicEye.Left);
+				_ApplyDummyCameraProperties(portalCameraR, dummyCameraR, Camera.StereoscopicEye.Right);
+			}
 		}
 
 
@@ -412,16 +505,17 @@ public class PortalBehaviour : UdonSharpBehaviour
 		prevInFront = false;
 		trigger.isTrigger = true;
 
-		// Set this last, once everything is initialized, so that
-		// UpdateTransforms doesn't run if there was an init error.
-		localPlayer = Networking.LocalPlayer;
-
 	} /* OnEnable */
 
 	void OnDisable()
 	{
 		if (portalCameraRoot != null) {
-			Destroy(portalCameraRoot.gameObject);
+			if (savePortalCameraRoot) {
+				portalCameraRoot.gameObject.SetActive(false);
+			} else {
+				Destroy(portalCameraRoot.gameObject);
+				portalCameraRoot = null;
+			}
 		}
 
 		if (viewTexL != null) {
@@ -431,7 +525,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 			viewTexR.Release();
 		}
 
-		portalCameraRoot = null;
 		virtualHead = null;
 		offsetL = null;
 		offsetR = null;
@@ -445,7 +538,12 @@ public class PortalBehaviour : UdonSharpBehaviour
 		dummyCameraR = null;
 		renderer = null;
 		trigger = null;
+		widthCache = 0;
+		heightCache = 0;
+		prevInFront = false;
+		prevBody = null;
 		localPlayer = null;
+		inVR = false;
 	}
 
 	/**
@@ -456,7 +554,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 	 */
 	public void SetMaterial(Material mat)
 	{
-		if (renderer == null) {
+		if (_noVisuals) {
+			return;
+		} else if (renderer == null) {
 			renderer = GetComponent<Renderer>();
 			if (renderer != null) {
 				renderer.material = mat;
@@ -475,7 +575,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 		if(mat.HasProperty("_ViewTexL") && mat.HasProperty("_ViewTexR")) {
 			mat.SetTexture("_ViewTexL", viewTexL);
-			mat.SetTexture("_ViewTexR", viewTexR);
+			if (inVR) {
+				mat.SetTexture("_ViewTexR", viewTexR);
+			}
 		} else {
 			Debug.LogError($"Portal '{name}' material changed to one that does not have the _ViewTexL or _ViewTexR properties.");
 		}
@@ -506,7 +608,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 			heightCache = (int)dummyCameraL.pixelRect.height;
 
 			_SetupTexture(viewTexL, portalCameraL);
-			if (dummyCameraL.stereoEnabled) {
+			if (inVR) {
 				_SetupTexture(viewTexR, portalCameraR);
 			}
 		}
@@ -538,7 +640,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	void OnWillRenderObject()
 	{
-		if (!Utilities.IsValid(localPlayer)) {
+		if (_noVisuals || !Utilities.IsValid(localPlayer)) {
 			return;
 		}
 
@@ -550,7 +652,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 			RefreshTextures();
 		}
 
-		if ( dummyCameraL.stereoEnabled ) {
+		if (inVR) {
 			// "Undo" the forced transformation applied to the dummy cameras
 			// by Unity. This puts them into the same position/rotation as
 			// the portal cameras.
@@ -578,9 +680,11 @@ public class PortalBehaviour : UdonSharpBehaviour
 		virtualHead.RotateAround(transform.position, transform.up, 180);
 		portalCameraRoot.SetPositionAndRotation(partner.position, partner.rotation);
 
-		// Set portal cameras to match dummy cameras' setings
-		_CopyCameraProperties(portalCameraL, dummyCameraL, Camera.StereoscopicEye.Left);
-		_CopyCameraProperties(portalCameraR, dummyCameraR, Camera.StereoscopicEye.Right);
+		if (inVR) {
+			// Set portal cameras to match dummy cameras' setings
+			_ApplyDummyCameraProperties(portalCameraL, dummyCameraL, Camera.StereoscopicEye.Left);
+			_ApplyDummyCameraProperties(portalCameraR, dummyCameraR, Camera.StereoscopicEye.Right);
+		}
 
 		// Update the projection matrix of the portal cameras to have an oblique
 		// projection matrix. This allows everything "behind" the portal to be
@@ -589,19 +693,44 @@ public class PortalBehaviour : UdonSharpBehaviour
 		Vector3 pos = partner.position;
 		Vector3 normal = -partner.forward;
 
-		Vector4 clipPlane = _CameraSpacePlane(portalCameraL.worldToCameraMatrix, pos, normal);
-		Matrix4x4 projection = portalCameraL.CalculateObliqueMatrix(clipPlane);
-		portalCameraL.projectionMatrix = projection;
+		if (_useObliqueProjection) {
+			Vector4 clipPlane = _CameraSpacePlane(portalCameraL.worldToCameraMatrix, pos, normal);
+			Matrix4x4 projection = portalCameraL.CalculateObliqueMatrix(clipPlane);
+			portalCameraL.projectionMatrix = projection;
+		}
 		portalCameraL.Render();
 
-		if ( dummyCameraL.stereoEnabled ) {
-			clipPlane = _CameraSpacePlane(portalCameraR.worldToCameraMatrix, pos, normal);
-			projection = portalCameraR.CalculateObliqueMatrix(clipPlane);
-			portalCameraR.projectionMatrix = projection;
+		if (inVR) {
+			if (_useObliqueProjection) {
+				Vector4 clipPlane = _CameraSpacePlane(portalCameraR.worldToCameraMatrix, pos, normal);
+				Matrix4x4 projection = portalCameraR.CalculateObliqueMatrix(clipPlane);
+				portalCameraR.projectionMatrix = projection;
+			}
 			portalCameraR.Render();
 		}
 
 	} /* OnWillRenderObject */
+
+	// This attempts to detect when a VR player leaves the world. VRC has about
+	// one second of fadeout when leaving the world where Udon stops working,
+	// so the cameras stop updating, but shaders still run so you can still see
+	// the portal view moving. It feels like when SteamVR freezes and your headset
+	// doesn't update; it's very nauseating. So try to black out the portals
+	// (set texture to null makes them render black) since it's a little nicer
+	// to see than the render texutre not updating.
+	public override void OnPlayerLeft(VRCPlayerApi player)
+	{
+		if (_noVisuals) {
+			return;
+		} else if (inVR) {
+			if (!Utilities.IsValid(player) || player.isLocal) {
+				if (renderer != null && renderer.material != null) {
+					renderer.material.SetTexture("_ViewTexL", null);
+					renderer.material.SetTexture("_ViewTexR", null);
+				}
+			}
+		}
+	}
 
 	public override void OnPlayerTriggerExit(VRCPlayerApi player)
 	{
@@ -610,7 +739,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	public override void OnPlayerTriggerStay(VRCPlayerApi player)
 	{
-		if (!player.isLocal) {
+		if (!player.isLocal || !Utilities.IsValid(localPlayer)) {
 			return;
 		}
 
@@ -648,8 +777,13 @@ public class PortalBehaviour : UdonSharpBehaviour
 			callbackScript.SendCustomEvent("_PortalWillTeleportPlayer");
 		}
 
-		Vector3 playerPos = localPlayer.GetPosition();
-		Vector3 localPos = transform.InverseTransformPoint(playerPos);
+		VRCPlayerApi.TrackingData origin = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Origin);
+
+		// This is calculating the new playspace origin position, not the new
+		// location of the player exactly. Since we're using AlignRoomWithSpawnPoint
+		// in VR (since that's necessary for correct rotation), calculating new
+		// playspace origin makes things easier.
+		Vector3 localPos = transform.InverseTransformPoint(origin.position);
 		localPos = Quaternion.AngleAxis(180, Vector3.up) * localPos;
 		Vector3 newPos = partner.TransformPoint(localPos);
 
@@ -661,7 +795,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		float inputY = transform.rotation.eulerAngles.y;
 		float outputY = partnerInvRot.eulerAngles.y;
 		float diffY = outputY - inputY;
-		float playerY = localPlayer.GetRotation().eulerAngles.y;
+		float playerY = origin.rotation.eulerAngles.y;
 		float newY = playerY + diffY;
 		Quaternion newRot = Quaternion.Euler(0, newY, 0);
 
@@ -669,7 +803,21 @@ public class PortalBehaviour : UdonSharpBehaviour
 		Vector3 localVel = transform.InverseTransformDirection(playerVel);
 		Vector3 newVel = partner180 * partner.TransformDirection(localVel);
 
-		localPlayer.TeleportTo(newPos, newRot);
+		#if UNITY_EDITOR
+			// AlignRoomWithSpawnPoint doesn't work properly in ClientSim
+			localPlayer.TeleportTo(
+				newPos,
+				newRot,
+				VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignPlayerWithSpawnPoint,
+				/*lerpOnRemote=*/false);
+		#else
+			localPlayer.TeleportTo(
+				newPos,
+				newRot,
+				VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignRoomWithSpawnPoint,
+				/*lerpOnRemote=*/false);
+		#endif
+
 		localPlayer.SetVelocity(newVel);
 	}
 
@@ -690,6 +838,10 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	public void OnTriggerStay(Collider collider)
 	{
+		if (!Utilities.IsValid(localPlayer)) {
+			return;
+		}
+
 		Rigidbody body = collider.attachedRigidbody;
 		if (body == null || body.isKinematic) {
 			return;
@@ -770,16 +922,14 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	private void _ResetCamera(Camera cam)
 	{
-		cam.Reset();
 		_ResetTransform(cam.transform);
+		_ApplyReferenceCamera(cam);
 
 		cam.enabled         = false;
 		cam.cullingMask     = 0;
 		cam.stereoTargetEye = StereoTargetEyeMask.None;
 		cam.targetTexture   = null;
 		cam.depth           = -10;
-
-		_ApplyReferenceCamera(cam);
 	}
 
 	private void _ApplyReferenceCamera(Camera cam)
@@ -804,17 +954,14 @@ public class PortalBehaviour : UdonSharpBehaviour
 		cam.targetTexture = tex;
 	}
 
-	private void _CopyCameraProperties(Camera to, Camera frm, Camera.StereoscopicEye eye)
+	// Only used in VR
+	private void _ApplyDummyCameraProperties(Camera to, Camera frm, Camera.StereoscopicEye eye)
 	{
 		to.farClipPlane     = frm.farClipPlane;
 		to.nearClipPlane    = frm.nearClipPlane;
 		to.fieldOfView      = frm.fieldOfView;
 		to.aspect           = frm.aspect;
-		if ( frm.stereoEnabled ) {
-			to.projectionMatrix = frm.GetStereoProjectionMatrix(eye);
-		} else {
-			to.projectionMatrix = frm.projectionMatrix;
-		}
+		to.projectionMatrix = frm.GetStereoProjectionMatrix(eye);
 	}
 
 	// Given position/normal of the plane, calculates plane in camera space.
@@ -848,5 +995,17 @@ public class PortalBehaviour : UdonSharpBehaviour
 		}
 		_textureResolution = val;
 		RefreshTextures();
+	}
+
+	public void _UpdateUseObliqueProjection(bool val)
+	{
+		if (!inVR && !val && portalCameraL != null) {
+			portalCameraL.farClipPlane     = dummyCameraL.farClipPlane;
+			portalCameraL.nearClipPlane    = dummyCameraL.nearClipPlane;
+			portalCameraL.fieldOfView      = dummyCameraL.fieldOfView;
+			portalCameraL.aspect           = dummyCameraL.aspect;
+			portalCameraL.ResetProjectionMatrix();
+		}
+		_useObliqueProjection = val;
 	}
 }

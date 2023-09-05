@@ -65,10 +65,10 @@ Shader "Aurycat/PortalViewNoDepth"
 				UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
 
 				if ( unity_StereoEyeIndex == 0 ) { // Left eye / desktop view
-					return tex2Dproj(_ViewTexL, UNITY_PROJ_COORD(i.screenPos));
+					return tex2Dproj(_ViewTexL, i.screenPos);
 				}
 				else { // Right eye
-					return tex2Dproj(_ViewTexR, UNITY_PROJ_COORD(i.screenPos));
+					return tex2Dproj(_ViewTexR, i.screenPos);
 				}
 			}
 			ENDCG

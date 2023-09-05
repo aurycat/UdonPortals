@@ -171,7 +171,7 @@ Shader "Aurycat/PortalView"
 				// Get the "existing"/"previous" depth where this fragment
 				// will be drawn. This value is in nonlinear view-space.
 				float4 stereoScreenPos = float4(i.stereoScreenPos, i.screenPos.zw);
-				float existing_view_depth = tex2Dproj(_CameraDepthTexture, UNITY_PROJ_COORD(stereoScreenPos)).r;
+				float existing_view_depth = SAMPLE_DEPTH_TEXTURE_PROJ(_CameraDepthTexture, stereoScreenPos).r;
 
 				// Do the manual z-test. Discard this fragment if the existing
 				// depth is closer than the fragment's depth. Note that the
@@ -195,10 +195,10 @@ Shader "Aurycat/PortalView"
 
 				// Now just do the normal render, just like PortalViewNoDepth.
 				if ( unity_StereoEyeIndex == 0 ) { // Left eye / desktop view
-					return tex2Dproj(_ViewTexL, UNITY_PROJ_COORD(i.screenPos));
+					return tex2Dproj(_ViewTexL, i.screenPos);
 				}
 				else { // Right eye
-					return tex2Dproj(_ViewTexR, UNITY_PROJ_COORD(i.screenPos));
+					return tex2Dproj(_ViewTexR, i.screenPos);
 				}
 			}
 			ENDCG
