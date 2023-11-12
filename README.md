@@ -7,19 +7,22 @@ This prefab lets you create visual portals in VRChat worlds that can be looked t
 
 ## Download
 
-### [Download the latest unitypackage here.](https://gitlab.com/aurycat/UdonPortals/-/raw/releases/UdonPortals-v1.2.unitypackage)
+### [Download the latest unitypackage here.](https://gitlab.com/aurycat/UdonPortals/-/raw/releases/UdonPortals-v1.3.unitypackage)
 
 Or view all releases [here](https://gitlab.com/aurycat/UdonPortals/-/releases).
 
+
 ## Basic Usage
 
-1. Install UdonSharp (available in the VRChat Creator Companion package list)
-2. Import the unitypackage into your project.
-3. Drag two "PortalNoDepth" prefab instances from the UdonPortals folder into your scene and place them at your desired locations.
-4. Then, in the Inspector for each portal...
-5. ...click "Generate Render Textures" in the PortalBehaviour component.
-6. ...drag the other portal into the "Partner Portal" field.
-7. ...add your world's reference camera ("Main Camera") to the "Reference Camera" field.
+1. Ensure UdonSharp is installed. If your VCC is up to date and you're making a new World project, it should be installed automatically.
+2. Import the UdonPortals.unitypackage into your VRC World project.
+3. Drag two "ExampleFramedPortal" prefab instances from the UdonPortals folder into your scene.
+4. In each framed portal instance, there is a child object named "Portal". It is a good idea to rename each of these to something different, e.g. "Portal A" and "Portal B".
+5. Ctrl-select both of the portal child objects. With both selected, in the Inspector...
+6. ...click "Generate Render Textures" in the PortalBehaviour component.
+7. ...click "Pair These Two Selected Portals"
+8. ...click "Autodetect Main Camera"
+9. ...click "Setup FOVDetector".
 
 That's it! The portals will look black in the editor, but will work in Play Mode and in-game. I suggest looking at the provided example scene for more details.
 
@@ -37,9 +40,7 @@ An optional, more advanced feature of this prefab is "portal depth". This adds a
 
 Enabling portal depth can be done by using the "PortalView" material instead of "PortalViewNoDepth". However, some changes to the world will be necessary to keep it from looking broken. Primarily, any "background" surface that appears nearby behind a portal (within 2 meters behind a portal), such as a wall, floor, or ceiling, needs to have a material with a Render Queue less than the PortalView material, which in turn must have a Render Queue less than 2000. The default Render Queue for the "PortalView" material is 1900. I suggest 1800 for the background surfaces.
 
-**[!] IMPORTANT: You CANNOT use the Standard shader for background surfaces, because VRChat will force all materials with the Standard shader to Render Queue 2000.** If you use Standard set to 1800, it will look fine in the editor, but won't work in-game! That's why I have a "ExampleBackgroundSurfaceForPortalDepth" shader which you can use instead. Other  shaders like Poiyomi World will work too.
-
-Finally, the last thing that's required is a depth light. If your scene has any realtime shadow-casting lights, then that's sufficient. If not, you will need to add the included "Depth Light" prefab into your scene.
+**[!] IMPORTANT: You CANNOT use the Standard shader for background surfaces, because VRChat will force all materials with the Standard shader to Render Queue 2000.** If you use Standard set to 1800, it will look fine in the editor, but won't work in-game! That's why I have a "ExampleBackgroundSurfaceForPortalDepth" shader which you can use instead. Other shaders like Poiyomi World will work too.
 
 
 ## Colliders behind the portal
@@ -51,7 +52,7 @@ One potential way of fixing this is to have colliders behind the portal turn off
 
 ## Credits
 
-Created by aurycat. Thanks to Nestorboy, Merlin, kingBigfootia, and my patient friends who helped me test it over and over :)
+Created by aurycat. Thanks to Nestorboy, Merlin, kingBigfootia, Esska, and my patient friends who helped me test it over and over :)
 
 Check out my "Portals Prefab Demo" world on VRChat to see some examples of what you can make with this prefab.
 

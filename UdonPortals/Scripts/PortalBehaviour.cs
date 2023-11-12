@@ -17,6 +17,12 @@
 //                   inspector editor UI; added noVisuals and useObliqueProjection
 //                   options; black out portals in VR as local player leaves instance
 //                   to prevent nauseating visuals.
+//  1.3 (2023-11-12) Some fixes to the oblique near clipping plane, and better support
+//                   for using a portal mesh that isn't a flad quad to avoid visual
+//                   flashes when walking through the portals. Improve the layout of
+//                   properties in the inspector again. Add 'behaviour mode' for
+//                   physics only or visuals only portals. Add momentum snapping option.
+//                   Support user-changed FOVs in Desktop play.
 
 using UdonSharp;
 using UnityEngine;
@@ -26,9 +32,40 @@ using System;
 using UnityEditor;
 using VRC.SDK3.Components;
 
+// See 'operatingMode' property documentation below for info
+public enum PortalBehaviourMode
+{
+	VisualsAndPhysics,
+	VisualsOnly,
+	PhysicsOnly,
+}
+
 [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
 public class PortalBehaviour : UdonSharpBehaviour
 {
+	// ========================================================================
+	// PUBLIC PROPERTIES
+	// ========================================================================
+
+	/**
+	 * VisualsAndPhysics:
+	 *     Default behavior. You can look through and walk through the portal.
+	 * VisualsOnly:
+	 *     The portal looks the same, but does not do any physics/teleporting
+	 *     to players or objects that pass through it. Use this if your portal
+	 *     is only for looks and cannot be passed through.
+	 * PhysicsOnly:
+	 *     The portal has the same teleporting behavior but does not show any
+	 *     image or render anything or even create a camera. If all you want
+	 *     is the physics/teleporting effect of the portal but not the visuals,
+	 *     use this to save performance by not calculating camera stuff.
+	 *
+	 * The PortalBehaviour component must be disabled and reenabled for changes
+	 * of this setting to take effect.
+	 */
+	[Tooltip("Whether the portal does visuals at all, does physics/teleporting at all, or does both. Doing both is the standard behavior.")]
+	public PortalBehaviourMode operatingMode = PortalBehaviourMode.VisualsAndPhysics;
+
 	/**
 	 * The transform of the partner portal. Normally this should be set to
 	 * another PortalBehaviour object, but it could be anything. The "partner"
@@ -41,6 +78,12 @@ public class PortalBehaviour : UdonSharpBehaviour
 	public Transform partner;
 
 	/**
+	 * Auto-detected from `partner`.
+	 */
+	[HideInInspector]
+	public PortalBehaviour partnerPortalBehaviour;
+
+	/**
 	 * The world reference camera is used to copy properties such as the
 	 * clearflags to the portal cameras. Properties are only updated when
 	 * the portal is enabled or when RefreshReferenceCamera() is called.
@@ -48,14 +91,16 @@ public class PortalBehaviour : UdonSharpBehaviour
 	[Tooltip("Set this to the world reference camera to copy its properties to the portal cameras.")]
 	public Camera referenceCamera;
 
+
 	/**
 	 * The Unity layers to show through the portal. Default value is to show:
 	 *  Default, TransparentFX, Ignore Raycast, Interactive, Player,
-	 *  Environment, Pickup, PickupNoEnvironment, Walkthrough, MirrorReflection
+	 *  Environment, Pickup, PickupNoEnvironment, Walkthrough, MirrorReflection,
+	 *  and all non-VRC custom layers (22 and above).
 	 */
 	[Tooltip("Only the selected layers are shown in the portal. Water and PlayerLocal are never shown.")]
 	[FieldChangeCallback(nameof(layerMask))]
-	public LayerMask _layerMask = 0x66B07;
+	public LayerMask _layerMask = unchecked((int)0xFFC66B07);
 	public LayerMask layerMask {
 		get => _layerMask;
 		set { _UpdateLayerMask(value); }
@@ -90,30 +135,54 @@ public class PortalBehaviour : UdonSharpBehaviour
 	public UdonBehaviour callbackScript;
 
 	/**
-	 * The offset, relative to the portal surface, of the oblique near
-	 * clipping plane of the portal camera.
+	 * When enabled, the portal will attempt to align the player's
+	 * momentum/velocity to the orientation of the portal when the
+	 * player travels through it. For portals that point close to
+	 * vertically (i.e. almost flat on the ground or on the ceiling),
+	 * using this setting will pretend the portal is perfectly axis-
+	 * aligned.
 	 *
-	 * Due to inaccuracies in the stereo separation value, portals without
-	 * any sort of opaque frame around their edge may have a slightly visible
-	 * "gap" at the floor when viewed in VR at some angles. If that happens,
-	 * you can set this to a slightly negative value, e.g. -0.02, which
-	 * should help. However it has the downside that at very shallow viewing
-	 * angles, you may see the wall behind the partner portal, if present.
+	 * This setting is useful for portals that can be arbitrarily
+	 * moved by the user (i.e. pickups), because placing the portal
+	 * perfectly flat with your hand in VR is nearly impossible, so
+	 * this makes it pretend like they did.
+	 *
+	 * This setting is also good for infinite falling loops or infinite
+	 * bouncing between two portals on the floor, because it will
+	 * cancel out horizontal momentum, making it easier for the player
+	 * to stay in the portal.
+	 *
+	 * The vertical snapping takes effect when the player is looking
+	 * at the portal. That way, once the player wants to leave the
+	 * infinite fall/bounce and they look away and start to move,
+	 * the portal won't cancel out their horizontal momentum and make
+	 * it hard to leave.
+	 *
+	 * If a portal is on a wall, like a door, this setting can be
+	 * turned off because it will have nearly no effect.
 	 */
-	[Tooltip("The offset, relative to the portal surface, of the oblique near clipping plane of the portal camera. This should probably be left at 0 except for some special cases.")]
-	public float clipPlaneOffset = 0f;
+	[Tooltip("When enabled, the portal attempts to align the player's momentum to the portal orientation when traveling through it. Additionally it has some extra snapping behavior for flat portals (i.e. on the floor or ceiling) to make infinite falls or infinite bouncing easier on the player. If a portal is on a wall, like a door, this setting can be turned off because it will have nearly no effect.")]
+	public bool momentumSnapping = false;
 
 	/**
-	 * The portal teleports the player when their head crosses the portal
-	 * surface plane. It can be helpful to have a slight positive offset
-	 * on the plane so that the player teleports slightly before their head
-	 * reaches the portal surface, to prevent clipping through the portal
-	 * for 1 frame. Unfortunately, if the player walks backwards through
-	 * the portal, then a larger teleportPlaneOffset will make the clipping
-	 * worse... but it helps for the common case of walking forward.
+	 * To support FOV changes in desktop (via the slider in the Graphics settings
+	 * menu), you must create an instance of the FOVDetector prefab included with
+	 * UdonPortals and put it in this property. This property must be set before
+	 * the portal GameObject is first activated (before Start() is called).
+	 *
+	 * You only need one FOVDetector instance in the world; multiple portals can
+	 * share a single instance.
+	 *
+	 * For more information on the FOVDetector, read the comment at the top of
+	 * UdonPortalsFOVDetector.cs.
 	 */
-	[Tooltip("The distance from the portal surface where the player will teleport when their head crosses.")]
-	public float teleportPlaneOffset = 0.03f;
+	[Tooltip("Set this to an instance of the FOVDetector prefab so the portals can support FOV changes for Desktop players.")]
+	public UdonPortalsFOVDetector desktopFOVDetector;
+
+
+	// ========================================================================
+	// ADVANCED PUBLIC PROPERTIES
+	// ========================================================================
 
 	/**
 	 * Portal surface textures. In VR, both Left and Right textures are used.
@@ -130,22 +199,94 @@ public class PortalBehaviour : UdonSharpBehaviour
 	public RenderTexture viewTexR;
 
 	/**
-	 * This should be set to the Portal Camera prefab in the RuntimePrefabs
-	 * folder of the UdonPortals package. This prefab contains the virtual
-	 * head camera. It gets instantiated when the portal is enabled, and is
-	 * destroyed when disabled.
+	 * The portal teleports the player when their head tracking point crosses
+	 * the portal surface plane. This value shifts that plane (for the purposes
+	 * of teleporting). Positive values move the plane "out" of the portal, so
+	 * you teleport earlier; negative values move the plane "into" the portal,
+	 * so you teleport later.
+	 *
+	 * If your portal mesh is a flat plane, it is helpful to have a slight
+	 * positive offset (about 0.03 is good) for this value so the player
+	 * teleports slightly before their head crosses the portal surface. This
+	 * reduces the chance of part of their field-of-view from clipping through
+	 * the portal surface for 1 frame before getting teleported, causing an
+	 * annoying "flash". The downside is that if the player walks through the
+	 * portal backwards, the larger teleportPlaneOffset will mean they'll
+	 * teleport too early and they'll see more of a flash! There isn't a
+	 * good way to fix this, which is why I recommend not using a flat mesh.
+	 *
+	 * If your portal mesh is not flat but an inverted cube shape (recommended)
+	 * then this should be left at 0.
 	 */
-	[Tooltip("Leave this as the default PortalCamera prefab asset unless you know what you're doing :)")]
-	public GameObject portalCameraPrefab;
+	[Tooltip("The distance from the portal surface where the player will teleport when their head crosses. Read this property's documentation in PortalBehaviour.cs before changing!")]
+	public float teleportPlaneOffset = 0f;
 
 	/**
-	 * This should be set to the Tracking Scale prefab in the RuntimePrefabs
-	 * folder of the UdonPortals package. The prefab contains an object that
-	 * is used to determine the player's avatar's stereo separation (aka IPD
-	 * aka distance between the eyes) in VR.
+	 * Normally portals use an "oblique projection matrix" to solve a problem
+	 * known as "Banana Juice". It's best described in this video by the team
+	 * that made the Portal games: https://youtu.be/ivyseNMVt-4&t=1064
+	 *
+	 * tl;dw when rendering the virtual portal camera, the entire world behind
+	 * the plane of the portal is clipped. Since this plane isn't necessarily
+	 * parallel to the view plane of the camera, an "oblique near clipping plane"
+	 * is used.
+	 *
+	 * One downside of using an oblique near clipping plane is it screws with
+	 * depth-buffer based effects when viewed through the portal. For example,
+	 * caustics in water shaders won't work (I believe it is resolvable by
+	 * modifying the water shader to account for the oblique projection, but
+	 * I don't know how.)
+	 *
+	 * If your scene uses depth-buffer-based effects, **and you avoid the
+	 * Banana Juice issue by making sure there's nothing behind your portal**
+	 * you may try disabling this setting.
 	 */
-	[Tooltip("Leave this as the default TrackingScale prefab asset unless you know what you're doing :)")]
-	public GameObject trackingScalePrefab;
+	[Tooltip("Read this property's documentation in PortalBehaviour.cs before changing!")]
+	public bool _useObliqueProjection = true;
+	// This getter/setter used to do extra stuff, now just here for backwards compatability
+	public bool useObliqueProjection {
+		get => _useObliqueProjection;
+		set { _useObliqueProjection = value; }
+	}
+
+	/**
+	 * The offset, relative to the portal surface, of the oblique near
+	 * clipping plane of the portal camera. Probably leave this at 0.
+	 *
+	 * Positive values move the plane "out" of the portal; negative
+	 * values move the plane "into" the portal.
+	 *
+	 * Due to inaccuracies in the stereo separation value, portals without
+	 * any sort of opaque frame around their edge may have a slightly visible
+	 * "gap" at the floor when viewed in VR at some angles. If that happens,
+	 * you can set this to a slightly positive value, e.g. 0.02, which
+	 * should help. However it has the downside that at very shallow viewing
+	 * angles, you may see the wall behind the partner portal, if present.
+	 */
+	[Tooltip("Read this property's documentation in PortalBehaviour.cs before changing!")]
+	public float obliqueClipPlaneOffset = 0f;
+
+	/**
+	 * The oblique near clipping plane is (surprise) a near clipping plane, and
+	 * as with any normal near clipping plane, the camera cannot be positioned
+	 * at or in front of it, otherwise all the careful math involved in rendering
+	 * breaks down. And for reasons I don't understand, it seems to break the
+	 * the rendering permanently until the camera is reset, even if the camera
+	 * moves back behind the clipping plane. Also for reasons I don't fully
+	 * understand, the camera needs to be at least a few cm behind the plane to
+	 * prevent those issues.
+	 *
+	 * This value is the distance of the portal camera from the clipping plane
+	 * at which oblique clipping is disabled and the camera renders normally.
+	 *
+	 * If this value is too large, stuff behind the partner portal will pop
+	 * into view when you get close to the portal. If this value is too small,
+	 * you'll see weird zfighting artifacts through the portal after you walk
+	 * through it a few times. 5cm has seemed to work as a good default, but
+	 * you may need to adjust. This value should never be negative.
+	 */
+	[Tooltip("Read this property's documentation in PortalBehaviour.cs before changing!")]
+	public float obliqueClipPlaneDisableDist = 0.05f;
 
 	/**
 	 * In order for the portal to look correct in VR, the player's avatar's
@@ -210,70 +351,35 @@ public class PortalBehaviour : UdonSharpBehaviour
 	}
 
 	/**
-	 * When true, the portal has the same teleporting behavior but does not
-	 * show any image or render anything or even create a camera. If all you
-	 * want is the physics/teleporting effect of the portal but not the
-	 * visuals, use this to save performance by not calculating camera stuff.
-	 *
-	 * The PortalBehavior component must be disabled and reenabled for changes
-	 * of this setting to take effect.
+	 * This should be set to the Portal Camera prefab in the RuntimePrefabs
+	 * folder of the UdonPortals package. This prefab contains the virtual
+	 * head camera. It gets instantiated when the portal is enabled, and is
+	 * destroyed when disabled.
 	 */
-	[Tooltip("Disables all visual effects of the portal, only the physics & teleporting are applied. The object must be disabled and reenabled for changes to this setting to take effect.")]
-	public bool noVisuals = false;
+	[Tooltip("Leave this as the default PortalCamera prefab asset unless you know what you're doing!")]
+	public GameObject portalCameraPrefab;
 
 	/**
-	 * Normally portals use an "oblique projection matrix" to solve a problem
-	 * known as "Banana Juice". It's best described in this video by the team
-	 * that made the Portal games: https://youtu.be/ivyseNMVt-4&t=1064
-	 *
-	 * tl;dw when rendering the virtual portal camera, the entire world behind
-	 * the plane of the portal is clipped. Since this plane isn't necessarily
-	 * parallel to the view plane of the camera, an oblique near clipping plane
-	 * is used.
-	 *
-	 * The downside of using an oblique near clipping plane is it screws with
-	 * depth-buffer based effects when viewed through the portal. For example,
-	 * caustics in water shaders won't work (I believe it is resolvable by 
-	 * modifying the water shader to account for the oblique projection, but
-	 * I don't know how.)
-	 *
-	 * You can use this setting to disable the oblique projection matrix if
-	 * you need to.
-	 * IMPORTANT: Only enable this if there is nothing behind the partner
-	 * portal -- e.g. the partner portal is floating in air, or placed on an
-	 * external wall.
+	 * This should be set to the Tracking Scale prefab in the RuntimePrefabs
+	 * folder of the UdonPortals package. The prefab contains an object that
+	 * is used to determine the player's avatar's stereo separation (aka IPD
+	 * aka distance between the eyes) in VR.
 	 */
-	[Tooltip("Read documentation for this setting in PortalBehaviour.cs")]
-	public bool _useObliqueProjection = true;
-	public bool useObliqueProjection {
-		get => _useObliqueProjection;
-		set { _UpdateUseObliqueProjection(value); }
-	}
+	[Tooltip("Leave this as the default TrackingScale prefab asset unless you know what you're doing!")]
+	public GameObject trackingScalePrefab;
 
-	// PortalCamera prefab instance.
-	[Tooltip("If not set, automatically set to an instance of portalCameraPrefab.")]
+	/**
+	 * PortalCamera prefab instance. You can set this manually if you need to
+	 * make some special customization to the portal camera object for only
+	 * one portal.
+	 */
+	[Tooltip("If left unset, gets automatically set to a generated instance of portalCameraPrefab.")]
 	public Transform portalCameraRoot;
 
-	/**
-	 * These colliders will be disabled when the player is positioned
-	 * to "walk" through the portal. This includes any HORZIONTAL
-	 * approaches to the portal. You can use this to turn off walls
-	 * behind the portal so the player can walk through the portal.
-	 */
-	// TODO
-	//public Collider[] disableForWalkthrough;
 
-	/**
-	 * These colliders will be disabled when the player is positioned
-	 * to "fall" (or jump up) through the portal. This includes any
-	 * VERTICAL approaches to the portal. You can use this to turn off
-	 * floors below the portal (or ceilings above the portal).
-	 */
-	// TODO
-	//public Collider[] disableForFallthrough;
-
-
-	// ---- PRIVATE PROPERTIES ----
+	// ========================================================================
+	// PRIVATE PROPERTIES
+	// ========================================================================
 
 	private bool savePortalCameraRoot;
 
@@ -339,6 +445,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 	// Whether the local player was previously in front of the portal on the
 	// most recent check
 	private bool prevInFront = false;
+	private bool headInTrigger = false;
 
 	// Rigidbody that was in front of the portal on the most recent check.
 	// If support is added for multiple rigidbodies moving through the
@@ -349,13 +456,19 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private VRCPlayerApi localPlayer;
 	private bool inVR;
 
-	// Cache of noVisuals that only changes at OnEnable
+	// Cache of operatingMode that only changes at OnEnable
 	private bool _noVisuals;
+	private bool _noPhysics;
+
+	// Vertical FOV cached from desktopFOVDetector
+	private int desktopFOV = 60;
+	private bool registeredFOVDetector = false;
 
 
 	void OnEnable()
 	{
-		_noVisuals = noVisuals;
+		_noVisuals = (operatingMode == PortalBehaviourMode.PhysicsOnly);
+		_noPhysics = (operatingMode == PortalBehaviourMode.VisualsOnly);
 
 		/*
 		 * Validate properties.
@@ -377,6 +490,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 			Debug.LogError($"Portal '{name}' has texture resolution set to an illegal value ({_textureResolution}).");
 			return;
 		}
+
+		partnerPortalBehaviour = partner.GetComponent<PortalBehaviour>();
 
 		if (!_noVisuals) {
 			renderer = GetComponent<Renderer>();
@@ -402,8 +517,19 @@ public class PortalBehaviour : UdonSharpBehaviour
 			Debug.LogError($"Portal '{name}' does not have a trigger collider. See README or example world for how to configure the trigger collider.");
 			return;
 		}
+		trigger.isTrigger = true;
 
 		if (!_noVisuals) {
+			// Portal must always be on the layer Water so it's not rendered
+			// recursively, or by other portals, or by mirrors. Recursive
+			// rendering is not supported, and critically, it can cause the
+			// render texture to be overwritten, causing visual distortion
+			// when looking through the initial portal.
+			if (gameObject.layer != 4) {
+				Debug.LogWarning($"Changing layer of portal '{name}' to Water (4)");
+				gameObject.layer = 4;
+			}
+
 			if (trackingScale == null) {
 				if (stereoSeparationMode == 0) {
 					trackingScale = InstantiateTrackingScale();
@@ -467,6 +593,19 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 			offsetR.gameObject.SetActive(inVR);
 
+			/*
+			 * Get FOV in desktop
+			 */
+			if (!inVR && !registeredFOVDetector) {
+				if (desktopFOVDetector != null) {
+					desktopFOVDetector.Register(this);
+					registeredFOVDetector = true;
+					desktopFOV = desktopFOVDetector.DetectedFOV;
+				}
+				else {
+					Debug.LogWarning($"Portal '{name}' does not have its desktop FOV detector set. The portal will not look correct if the player changes their FOV on desktop.");
+				}
+			}
 
 			/*
 			 * Configure portal cameras.
@@ -503,7 +642,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		 */
 
 		prevInFront = false;
-		trigger.isTrigger = true;
+		headInTrigger = false;
 
 	} /* OnEnable */
 
@@ -541,6 +680,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		widthCache = 0;
 		heightCache = 0;
 		prevInFront = false;
+		headInTrigger = false;
 		prevBody = null;
 		localPlayer = null;
 		inVR = false;
@@ -638,6 +778,12 @@ public class PortalBehaviour : UdonSharpBehaviour
 		return trackingScaleObj.transform;
 	}
 
+	// Local vars within OnWillRenderObject, just placed here to avoid
+	// initializing them every frame when not doing oblique projection
+	private Vector3 ocpNormal = Vector3.zero;
+	private Vector3 ocpPos = Vector3.zero;
+	private Plane ocpDisablePlane = new Plane(Vector3.zero, Vector3.zero);
+
 	void OnWillRenderObject()
 	{
 		if (_noVisuals || !Utilities.IsValid(localPlayer)) {
@@ -685,26 +831,40 @@ public class PortalBehaviour : UdonSharpBehaviour
 			_ApplyDummyCameraProperties(portalCameraL, dummyCameraL, Camera.StereoscopicEye.Left);
 			_ApplyDummyCameraProperties(portalCameraR, dummyCameraR, Camera.StereoscopicEye.Right);
 		}
-
-		// Update the projection matrix of the portal cameras to have an oblique
-		// projection matrix. This allows everything "behind" the portal to be
-		// culled, so that the portal can have stuff behind it without obscuring
-		// the view of the cameras. Need to do this once for each eye.
-		Vector3 pos = partner.position;
-		Vector3 normal = -partner.forward;
+		else {
+			portalCameraL.fieldOfView = desktopFOV;
+			portalCameraL.ResetProjectionMatrix();
+		}
 
 		if (_useObliqueProjection) {
-			Vector4 clipPlane = _CameraSpacePlane(portalCameraL.worldToCameraMatrix, pos, normal);
-			Matrix4x4 projection = portalCameraL.CalculateObliqueMatrix(clipPlane);
-			portalCameraL.projectionMatrix = projection;
+			// Setup an oblique projection matrix for the portal cameras.
+			// In VR, do this separately for each eye.
+			// Read the documentation for 'useObliqueProjection' for more info.
+			ocpNormal = -partner.forward;
+			ocpPos = partner.position - (ocpNormal * obliqueClipPlaneOffset);
+			ocpDisablePlane = new Plane(ocpNormal, ocpPos - (ocpNormal * obliqueClipPlaneDisableDist));
+
+			// In some cases, we need to avoid oblique projection. Read the
+			// documentation for 'obliqueClipPlaneDisableDist' to explain why.
+			//
+			// The GetSide check is detecting whether the portal camera is in
+			// front of the partner portal - effectively in front of its own
+			// near plane. We skip oblique projection if that happens.
+			if (!headInTrigger || !ocpDisablePlane.GetSide(offsetL.position)) {
+				Vector4 clipPlane = _CameraSpacePlane(portalCameraL.worldToCameraMatrix, ocpPos, ocpNormal);
+				Matrix4x4 projection = portalCameraL.CalculateObliqueMatrix(clipPlane);
+				portalCameraL.projectionMatrix = projection;
+			}
 		}
 		portalCameraL.Render();
 
 		if (inVR) {
 			if (_useObliqueProjection) {
-				Vector4 clipPlane = _CameraSpacePlane(portalCameraR.worldToCameraMatrix, pos, normal);
-				Matrix4x4 projection = portalCameraR.CalculateObliqueMatrix(clipPlane);
-				portalCameraR.projectionMatrix = projection;
+				if (!headInTrigger || !ocpDisablePlane.GetSide(offsetR.position)) {
+					Vector4 clipPlane = _CameraSpacePlane(portalCameraR.worldToCameraMatrix, ocpPos, ocpNormal);
+					Matrix4x4 projection = portalCameraR.CalculateObliqueMatrix(clipPlane);
+					portalCameraR.projectionMatrix = projection;
+				}
 			}
 			portalCameraR.Render();
 		}
@@ -735,6 +895,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 	public override void OnPlayerTriggerExit(VRCPlayerApi player)
 	{
 		prevInFront = false;
+		headInTrigger = false;
 	}
 
 	public override void OnPlayerTriggerStay(VRCPlayerApi player)
@@ -742,13 +903,23 @@ public class PortalBehaviour : UdonSharpBehaviour
 		if (!player.isLocal || !Utilities.IsValid(localPlayer)) {
 			return;
 		}
+		// 'headInTrigger' is used for rendering when _useObliqueProjection is on
+		if (_noPhysics && !_useObliqueProjection) {
+			return;
+		}
 
 		VRCPlayerApi.TrackingData playerHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
 
+		// ClosestPoint is the only way to manually check if a point is inside a collider.
+		headInTrigger = (trigger.ClosestPoint(playerHead.position) == playerHead.position);
+
+		if (_noPhysics) {
+			return;
+		}
+
 		// Check that the player's head is actually in the trigger, so we don't
-		// teleport if the player is merely walking beside the portal. ClosestPoint
-		// is the only way to manually check if a point is inside a collider.
-		if (trigger.ClosestPoint(playerHead.position) == playerHead.position)
+		// teleport if the player is merely walking beside the portal.
+		if (headInTrigger)
 		{
 			Plane p = new Plane(-transform.forward, transform.position - (transform.forward*teleportPlaneOffset));
 			bool inFront = p.GetSide(playerHead.position);
@@ -769,6 +940,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 		}
 	}
 
+	private Quaternion local180 = Quaternion.AngleAxis(180, Vector3.up);
+
 	// Not public API. Only public for calling from SendCustomEventDelayedFrames.
 	public void _TeleportPlayer()
 	{
@@ -777,15 +950,26 @@ public class PortalBehaviour : UdonSharpBehaviour
 			callbackScript.SendCustomEvent("_PortalWillTeleportPlayer");
 		}
 
-		VRCPlayerApi.TrackingData origin = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Origin);
+		if (partnerPortalBehaviour != null) {
+			partnerPortalBehaviour.OnWillReceivePlayer();
+		}
 
-		// This is calculating the new playspace origin position, not the new
-		// location of the player exactly. Since we're using AlignRoomWithSpawnPoint
-		// in VR (since that's necessary for correct rotation), calculating new
-		// playspace origin makes things easier.
-		Vector3 localPos = transform.InverseTransformPoint(origin.position);
-		localPos = Quaternion.AngleAxis(180, Vector3.up) * localPos;
-		Vector3 newPos = partner.TransformPoint(localPos);
+		VRCPlayerApi.TrackingData origin = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Origin);
+		VRCPlayerApi.TrackingData head = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
+
+		// Don't use transform/partner.TransformPoint because it accounts for
+		// scale, which we don't want -- otherwise a portal pair that have
+		// different world scales (even if the surfaces are identical size
+		// due to different meshes) won't work correctly together.
+		Matrix4x4 selfWorldToLocalMat = Matrix4x4.TRS(transform.position, transform.rotation, Vector3.one).inverse;
+		Matrix4x4 partnerLocalToWorldMat = Matrix4x4.TRS(partner.position, partner.rotation, Vector3.one);
+
+		// Calculate the new position of the player's *head*, not their origin.
+		// The player teleports when their head passes through the surface, so
+		// the relative position of the head is what needs to remain constant.
+		Vector3 localHeadPos = selfWorldToLocalMat.MultiplyPoint3x4(head.position);
+		localHeadPos = local180 * localHeadPos;
+		Vector3 newHeadPos = partnerLocalToWorldMat.MultiplyPoint3x4(localHeadPos);
 
 		// Player rotation only cares about Y. In fact, when I tried to
 		// do rotation for all axes, like with Rigidbodies below, it
@@ -799,10 +983,101 @@ public class PortalBehaviour : UdonSharpBehaviour
 		float newY = playerY + diffY;
 		Quaternion newRot = Quaternion.Euler(0, newY, 0);
 
-		Vector3 playerVel = localPlayer.GetVelocity();
-		Vector3 localVel = transform.InverseTransformDirection(playerVel);
-		Vector3 newVel = partner180 * partner.TransformDirection(localVel);
+		// From the newHeadPos and rotation delta, calculate the new origin
+		// position which is what we need for teleporting.
+		Vector3 headToOrigin = origin.position - head.position;
+		headToOrigin = Quaternion.AngleAxis(diffY, Vector3.up) * headToOrigin;
+		Vector3 newPos = newHeadPos + headToOrigin;
 
+		// Find new velocity
+
+		// Use cosine of angles (aka output of dot product) instead of angles
+		// since it's cheaper to compute Vector3.Dot than Vector3.Angle, and
+		// with Dot its easier to compare directionless - just use Abs.
+		const float LOOKING_AT_PORTAL = 0.70710678f; // cos(45 deg)
+		const float SNAP_KINDA_CLOSE  = 0.96592582f; // cos(15 deg)
+		const float SNAP_CLOSE        = 0.99254615f; // cos(7 deg)
+		const float SNAP_NEARLY_EXACT = 0.99984769f; // cos(1 deg)
+
+		Vector3 playerVel = localPlayer.GetVelocity();
+		Vector3 localVel;
+
+		// Transform player's momentum into portal-local space, where 'forward'
+		// is directly into this portal.
+		if (momentumSnapping) {
+			if (Mathf.Abs(transform.forward.y) > SNAP_CLOSE) {
+				// Player is moving approximately vertically towards a portal approximately
+				// parallel to the ground.
+				// We want to snap them to alignment, but there is an issue: in an infinite
+				// fall situation, it can be very hard to get out. Any horizontal momentum
+				// the player obtains from pressing on the thumbstick/WASD gets erased each
+				// time they pass through the portal, which is happening frequently. It makes
+				// moving out very slow.
+				// So instead, take a hint from Portal's (the game) funneling system and
+				// require the player to be looking at the portal to do the snapping. If they
+				// look away, require a nearly perfect vertical momentum. That way they can
+				// keep infinite-falling once they start, but it's still easy to get out just
+				// by looking away.
+				float playerVertAlignment = Mathf.Abs(playerVel.normalized.y);
+				if ( playerVertAlignment > SNAP_NEARLY_EXACT ||
+				     (playerVertAlignment > SNAP_CLOSE &&
+				      Vector3.Dot((head.rotation * Vector3.forward), transform.forward) > LOOKING_AT_PORTAL) )
+				{
+					// Snap! Player must be moving towards the portal,
+					// so we can ignore the direction of their velocity.
+					localVel = Vector3.forward * Mathf.Abs(playerVel.y);
+				}
+				else {
+					localVel = transform.InverseTransformDirection(playerVel);
+				}
+			}
+			else if (Mathf.Abs(Vector3.Dot(playerVel.normalized, transform.forward)) > SNAP_KINDA_CLOSE) {
+				// Portal is not flat on the ground, but player is still
+				// approaching portal head-on - snap to perfectly aligned.
+				// Output magnitude is reduced to the component of the
+				// player's velocity that is aligned to the portal.
+				localVel = Vector3.forward * Vector3.Dot(playerVel, transform.forward);
+			}
+			else {
+				localVel = transform.InverseTransformDirection(playerVel);
+			}
+		}
+		else {
+			localVel = transform.InverseTransformDirection(playerVel);
+		}
+
+		// Flip momentum around, so it's going out instead of in
+		localVel = local180 * localVel;
+
+		// Transform local momentum back into world-space, from the partner
+		// portal's rotation.
+		Quaternion localToPartnerRot = partner.rotation;
+		if (momentumSnapping) {
+			// Instead of like above where we snap the player's incoming
+			// velocity vector, here we're snapping the partner portal's
+			// outwards direction (-forward) to vertical if it's nearly there.
+			// The partner outwards direction is NOT necessarily the same
+			// as the player's new final velocity direction.
+			Vector3 partnerOutwards = -partner.forward;
+			float partnerVertAlignment = Mathf.Abs(Vector3.Dot(partnerOutwards, Vector3.up));
+			if (Mathf.Approximately(partnerVertAlignment, 1)) {
+				// Partner is already perfectly parallel to ground, no need to snap it
+			}
+			else if (partnerVertAlignment > SNAP_CLOSE) {
+				// targetDir is Vector3.up if the portal is "on the ground"
+				// -Vector3.up if the portal is "on the ceiling".
+				Vector3 targetDir = Vector3.up * Mathf.Sign(partnerOutwards.y);
+				// Get a quaternion which would rotate the partner's outwards
+				// vector to be vertical, and apply it to the local-to-world
+				// transformation. In other words, this pretends the yaw/pitch
+				// of the portal were adjusted to become vertical, but roll is kept.
+				Quaternion toVertical = Quaternion.FromToRotation(partnerOutwards, targetDir);
+				localToPartnerRot = toVertical * localToPartnerRot;
+			}
+		}
+		Vector3 newVel = localToPartnerRot * localVel;
+
+		// Do teleport
 		#if UNITY_EDITOR
 			// AlignRoomWithSpawnPoint doesn't work properly in ClientSim
 			localPlayer.TeleportTo(
@@ -838,7 +1113,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	public void OnTriggerStay(Collider collider)
 	{
-		if (!Utilities.IsValid(localPlayer)) {
+		if (_noPhysics || !Utilities.IsValid(localPlayer)) {
 			return;
 		}
 
@@ -930,6 +1205,11 @@ public class PortalBehaviour : UdonSharpBehaviour
 		cam.stereoTargetEye = StereoTargetEyeMask.None;
 		cam.targetTexture   = null;
 		cam.depth           = -10;
+
+		if (!inVR) {
+			cam.fieldOfView = desktopFOV;
+			cam.ResetProjectionMatrix();
+		}
 	}
 
 	private void _ApplyReferenceCamera(Camera cam)
@@ -939,6 +1219,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 			cam.backgroundColor     = referenceCamera.backgroundColor;
 			cam.clearFlags          = referenceCamera.clearFlags;
 			cam.useOcclusionCulling = referenceCamera.useOcclusionCulling;
+			cam.farClipPlane        = referenceCamera.farClipPlane;
+			// Clamp reference cam near-plane like VRC does. See ClientSimSceneManager.cs
+			cam.nearClipPlane       = Mathf.Clamp(referenceCamera.nearClipPlane, 0.01f, 0.05f);
 		}
 	}
 
@@ -967,8 +1250,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 	// Given position/normal of the plane, calculates plane in camera space.
 	private Vector4 _CameraSpacePlane(Matrix4x4 m, Vector3 pos, Vector3 normal)
 	{
-		Vector3 offsetPos = pos + normal * clipPlaneOffset;
-		Vector3 cpos = m.MultiplyPoint(offsetPos);
+		Vector3 cpos = m.MultiplyPoint(pos);
 		Vector3 cnormal = m.MultiplyVector(normal).normalized;
 		return new Vector4(cnormal.x, cnormal.y, cnormal.z, -Vector3.Dot(cpos, cnormal));
 	}
@@ -997,15 +1279,21 @@ public class PortalBehaviour : UdonSharpBehaviour
 		RefreshTextures();
 	}
 
-	public void _UpdateUseObliqueProjection(bool val)
+	// Called from the FOVDetector
+	public void OnFOVChanged()
 	{
-		if (!inVR && !val && portalCameraL != null) {
-			portalCameraL.farClipPlane     = dummyCameraL.farClipPlane;
-			portalCameraL.nearClipPlane    = dummyCameraL.nearClipPlane;
-			portalCameraL.fieldOfView      = dummyCameraL.fieldOfView;
-			portalCameraL.aspect           = dummyCameraL.aspect;
-			portalCameraL.ResetProjectionMatrix();
-		}
-		_useObliqueProjection = val;
+		desktopFOV = desktopFOVDetector.DetectedFOV;
+	}
+
+	// Called by the partner portal (if the partner is a PortalBehaviour)
+	// when it is about to teleport the player here.
+	public void OnWillReceivePlayer() {
+		// After being teleported here, there may be a few frames of
+		// rendering the portal before OnPlayerTriggerStay is called
+		// to update `headInTrigger`. That can lead to some flicker
+		// due to wrongly using an oblique near plane while an eye
+		// is still in the portal. Set this true assuming that the
+		// head will always be in the trigger after teleporting.
+		headInTrigger = true;
 	}
 }
