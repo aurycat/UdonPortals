@@ -1,0 +1,19 @@
+{
+    "name": "aurycat.UdonPortals.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:960b698bcd1c8374b8f3e11c22ecac60",
+        "GUID:99835874ee819da44948776e0df4ff1d"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

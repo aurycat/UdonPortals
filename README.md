@@ -2,21 +2,21 @@
 
 This prefab lets you create visual portals in VRChat worlds that can be looked through, walked through, fallen through, and appear as high quality as a Mirror. Even pickups can be thrown through the portals!  
 
-![Looping video of walking through portals](https://gitlab.com/aurycat/UdonPortals/-/raw/releases/videodemo.gif)
+![Looping video of walking through portals](.github/resources/videodemo.gif)
 
 
 ## Download
 
-### [Download the latest unitypackage here.](https://gitlab.com/aurycat/UdonPortals/-/raw/releases/UdonPortals-v1.3.unitypackage)
+### [Install through VRChat Creator Companion (VPM)](https://aurycat.github.io/vpm)
 
-Or view all releases [here](https://gitlab.com/aurycat/UdonPortals/-/releases).
+[Or view all releases & download .unitypackage](https://github.com/aurycat/UdonPortals/releases)
 
 
 ## Basic Usage
 
-1. Ensure UdonSharp is installed. If your VCC is up to date and you're making a new World project, it should be installed automatically.
-2. Import the UdonPortals.unitypackage into your VRC World project.
-3. Drag two "ExampleFramedPortal" prefab instances from the UdonPortals folder into your scene.
+1. Ensure UdonSharp is installed. (If your VCC is up to date, it is installed automatically for all VRC Worlds projects.)
+2. Install UdonPortals into your VRC World project through VCC or directly through a .unitypackage.
+3. Drag two "ExampleFramedPortal" prefab instances from the Packages/UdonPortals/Prefabs folder into your scene.
 4. In each framed portal instance, there is a child object named "Portal". It is a good idea to rename each of these to something different, e.g. "Portal A" and "Portal B".
 5. Ctrl-select both of the portal child objects. With both selected, in the Inspector...
 6. ...click "Generate Render Textures" in the PortalBehaviour component.
