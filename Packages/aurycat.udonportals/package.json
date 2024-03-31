@@ -1,7 +1,7 @@
 {
   "name": "aurycat.udonportals",
   "displayName": "UdonPortals",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "unity": "2022.3",
   "description": "A prefab to let you create visual portals in VRChat worlds that can be looked through, walked through, fallen through, and appear as high quality as a Mirror.",
   "vrchatVersion": "2022.1.1",
