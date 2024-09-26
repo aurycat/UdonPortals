@@ -816,8 +816,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 				_stereoSeparation = manualStereoSeparation;
 			}
 			float centerToEyeDist = _stereoSeparation * 0.5f;
-			offsetL.localPosition = new Vector3(-centerToEyeDist, 0f, 0f);
-			offsetR.localPosition = new Vector3(centerToEyeDist, 0f, 0f);
+			offsetL.localPosition = new Vector3(-centerToEyeDist, 0f, -centerToEyeDist * 0.5f);
+			offsetR.localPosition = new Vector3(centerToEyeDist, 0f, -centerToEyeDist * 0.5f);
 		}
 
 		// Move the virtual head to its appropriate position relative to the opposite portal.
