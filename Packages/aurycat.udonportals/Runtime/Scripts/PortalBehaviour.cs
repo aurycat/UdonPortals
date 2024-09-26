@@ -809,15 +809,15 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 			// Calculate stereo separation. This changes based on avatar size.
 			if (stereoSeparationMode == 0) {
-				_stereoSeparation = (1f/trackingScale.localScale.x) * dummyCameraL.stereoSeparation;
+				_stereoSeparation = 0.03f * (1f / trackingScale.localScale.x);
 			} else if (stereoSeparationMode == 1) {
-				_stereoSeparation = trackingScale.localScale.x * dummyCameraL.stereoSeparation;
+				_stereoSeparation = 0.03f * trackingScale.localScale.x;
 			} else {
 				_stereoSeparation = manualStereoSeparation;
 			}
-			float centerToEyeDist = _stereoSeparation * 0.5f;
-			offsetL.localPosition = new Vector3(-centerToEyeDist, 0f, 0f);
-			offsetR.localPosition = new Vector3(centerToEyeDist, 0f, 0f);
+			float centerToEyeDist = _stereoSeparation;
+			offsetL.localPosition = new Vector3(-centerToEyeDist, 0f, -centerToEyeDist * 0.5f);
+			offsetR.localPosition = new Vector3(centerToEyeDist, 0f, -centerToEyeDist * 0.5f);
 		}
 
 		// Move the virtual head to its appropriate position relative to the opposite portal.
