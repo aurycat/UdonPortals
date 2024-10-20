@@ -50,10 +50,17 @@ Players or objects can only pass through a portal if there is no collider immedi
 One potential way of fixing this is to have colliders behind the portal turn off when the player is inside the portal trigger, on the front-side of the portal. However, implementing this would require logic specific to your world and your use case, so I have not included that in the prefab. I may try to implement some "built-in" solution for this eventually, but for now, you're on your own!
 
 
+## Known Issues
+
+- I made portals in VRChat, so clearly I have some issues.
+- Players canot walk through the portal when they are using holoport mode to move. I'm not aware of a good way to fix this; if you have an idea, post it on [Issue #4](https://github.com/aurycat/UdonPortals/issues/4)!
+- Recursive rendering is not supported. I have no plans to attempt to implement it right now (even though it would be really cool).
+
+
 ## Credits
 
 Created by aurycat. Thanks to Nestorboy, Merlin, kingBigfootia, Esska, and my patient friends who helped me test it over and over :)
 
-Check out my "Portals Prefab Demo" world on VRChat to see some examples of what you can make with this prefab.
+Check out my [Portals Prefab Demo](https://vrchat.com/home/world/wrld_c6dc655d-e665-4a26-abc9-da0617257bc0) world on VRChat to see some examples of what you can make with this prefab.
 
 This prefab is released under the [MIT license](https://mit-license.org/). Attribution is not required, but much appreciated!
