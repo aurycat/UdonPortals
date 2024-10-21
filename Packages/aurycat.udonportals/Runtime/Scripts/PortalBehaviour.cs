@@ -1,4 +1,4 @@
-﻿// This is the main script that controls the portals. All the public properties
+// This is the main script that controls the portals. All the public properties
 // and functions have document comments above them. Please read them for more
 // detail.
 //
@@ -464,6 +464,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private int desktopFOV = 60;
 	private bool registeredFOVDetector = false;
 
+	// Bool for storing if the player is in HoloPort locomotion
+	private bool isHoloPort;
 
 	void OnEnable()
 	{
@@ -910,8 +912,12 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 		VRCPlayerApi.TrackingData playerHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
 
+		Vector3 holoportHeadPos = localPlayer.GetBonePosition(HumanBodyBones.Head);
+		isHoloPort = Vector3.Distance(playerHead.position, holoportHeadPos) > 1;
+		Vector3 headPosition = isHoloPort ? holoportHeadPos : playerHead.position;
+
 		// ClosestPoint is the only way to manually check if a point is inside a collider.
-		headInTrigger = (trigger.ClosestPoint(playerHead.position) == playerHead.position);
+		headInTrigger = (trigger.ClosestPoint(headPosition) == headPosition);
 
 		if (_noPhysics) {
 			return;
@@ -922,7 +928,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		if (headInTrigger)
 		{
 			Plane p = new Plane(-transform.forward, transform.position - (transform.forward*teleportPlaneOffset));
-			bool inFront = p.GetSide(playerHead.position);
+			bool inFront = p.GetSide(headPosition);
 
 			if (prevInFront && !inFront) {
 				// Player crossed from front to back, teleport them
@@ -955,8 +961,11 @@ public class PortalBehaviour : UdonSharpBehaviour
 		}
 
 		VRCPlayerApi.TrackingData origin = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Origin);
+		VRCPlayerApi.TrackingData avatarRoot = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.AvatarRoot);
 		VRCPlayerApi.TrackingData head = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
 
+		Vector3 activeOrigin = isHoloPort ? avatarRoot.position : origin.position;
+		Vector3 activeHeadPos = isHoloPort ? localPlayer.GetBonePosition(HumanBodyBones.Head) : head.position;
 		// Don't use transform/partner.TransformPoint because it accounts for
 		// scale, which we don't want -- otherwise a portal pair that have
 		// different world scales (even if the surfaces are identical size
@@ -967,7 +976,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		// Calculate the new position of the player's *head*, not their origin.
 		// The player teleports when their head passes through the surface, so
 		// the relative position of the head is what needs to remain constant.
-		Vector3 localHeadPos = selfWorldToLocalMat.MultiplyPoint3x4(head.position);
+		Vector3 localHeadPos = selfWorldToLocalMat.MultiplyPoint3x4(activeHeadPos);
 		localHeadPos = local180 * localHeadPos;
 		Vector3 newHeadPos = partnerLocalToWorldMat.MultiplyPoint3x4(localHeadPos);
 
@@ -979,13 +988,13 @@ public class PortalBehaviour : UdonSharpBehaviour
 		float inputY = transform.rotation.eulerAngles.y;
 		float outputY = partnerInvRot.eulerAngles.y;
 		float diffY = outputY - inputY;
-		float playerY = origin.rotation.eulerAngles.y;
+		float playerY = isHoloPort ? avatarRoot.rotation.eulerAngles.y : origin.rotation.eulerAngles.y;
 		float newY = playerY + diffY;
 		Quaternion newRot = Quaternion.Euler(0, newY, 0);
 
 		// From the newHeadPos and rotation delta, calculate the new origin
 		// position which is what we need for teleporting.
-		Vector3 headToOrigin = origin.position - head.position;
+		Vector3 headToOrigin = activeOrigin - activeHeadPos;
 		headToOrigin = Quaternion.AngleAxis(diffY, Vector3.up) * headToOrigin;
 		Vector3 newPos = newHeadPos + headToOrigin;
 
@@ -1020,8 +1029,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 				// by looking away.
 				float playerVertAlignment = Mathf.Abs(playerVel.normalized.y);
 				if ( playerVertAlignment > SNAP_NEARLY_EXACT ||
-				     (playerVertAlignment > SNAP_CLOSE &&
-				      Vector3.Dot((head.rotation * Vector3.forward), transform.forward) > LOOKING_AT_PORTAL) )
+					 (playerVertAlignment > SNAP_CLOSE &&
+					  Vector3.Dot((head.rotation * Vector3.forward), transform.forward) > LOOKING_AT_PORTAL) )
 				{
 					// Snap! Player must be moving towards the portal,
 					// so we can ignore the direction of their velocity.
@@ -1077,6 +1086,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 		}
 		Vector3 newVel = localToPartnerRot * localVel;
 
+		if(!isHoloPort)
+		{
 		// Do teleport
 		#if UNITY_EDITOR
 			// AlignRoomWithSpawnPoint doesn't work properly in ClientSim
@@ -1092,6 +1103,15 @@ public class PortalBehaviour : UdonSharpBehaviour
 				VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignRoomWithSpawnPoint,
 				/*lerpOnRemote=*/false);
 		#endif
+		}
+		else
+		{
+			localPlayer.TeleportTo(
+				newPos,
+				newRot,
+				VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignPlayerWithSpawnPoint,
+				/*lerpOnRemote=*/false);
+		}
 
 		localPlayer.SetVelocity(newVel);
 	}
