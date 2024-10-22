@@ -1029,8 +1029,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 				// by looking away.
 				float playerVertAlignment = Mathf.Abs(playerVel.normalized.y);
 				if ( playerVertAlignment > SNAP_NEARLY_EXACT ||
-					 (playerVertAlignment > SNAP_CLOSE &&
-					  Vector3.Dot((head.rotation * Vector3.forward), transform.forward) > LOOKING_AT_PORTAL) )
+				     (playerVertAlignment > SNAP_CLOSE &&
+				      Vector3.Dot((head.rotation * Vector3.forward), transform.forward) > LOOKING_AT_PORTAL) )
 				{
 					// Snap! Player must be moving towards the portal,
 					// so we can ignore the direction of their velocity.
@@ -1086,8 +1086,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		}
 		Vector3 newVel = localToPartnerRot * localVel;
 
-		if(!isHoloPort)
-		{
+		if(!isHoloPort) {
 		// Do teleport
 		#if UNITY_EDITOR
 			// AlignRoomWithSpawnPoint doesn't work properly in ClientSim
@@ -1103,9 +1102,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 				VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignRoomWithSpawnPoint,
 				/*lerpOnRemote=*/false);
 		#endif
-		}
-		else
-		{
+		} else {
 			localPlayer.TeleportTo(
 				newPos,
 				newRot,
