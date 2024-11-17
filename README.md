@@ -52,9 +52,9 @@ One potential way of fixing this is to have colliders behind the portal turn off
 
 ## Known Issues
 
-- I made portals in VRChat, so clearly I have some issues.
-- Players canot walk through the portal when they are using holoport mode to move. I'm not aware of a good way to fix this; if you have an idea, post it on [Issue #4](https://github.com/aurycat/UdonPortals/issues/4)!
 - Recursive rendering is not supported. I have no plans to attempt to implement it right now (even though it would be really cool).
+- Can encounter minor visual and teleporting issues when using Holoport locomotion.
+- Rare case where travelling through portals isn't completely visually seamless for some players. The cause is unknown -- see [Pull #3](https://github.com/aurycat/UdonPortals/pull/3).
 
 
 ## Credits
