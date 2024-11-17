@@ -33,6 +33,9 @@ Shader "Aurycat/PortalViewNoDepth"
 			sampler2D _ViewTexL;
 			sampler2D _ViewTexR;
 
+			uniform float _VRChatCameraMode;
+			uniform float _VRChatMirrorMode;
+
 			struct appdata
 			{
 				float4 vertex : POSITION;
@@ -63,6 +66,14 @@ Shader "Aurycat/PortalViewNoDepth"
 
 			half4 frag(v2f i) : SV_Target
 			{
+				// Output black when rendering in handheld camera, which would
+				// otherwise look very broken. Same for rendering in mirror,
+				// though mirrors are already handled by them not rendering the
+				// Water layer. But add a check for mirrors for good measure.
+				if (_VRChatCameraMode > 0 || _VRChatMirrorMode > 0) {
+					return half4(0,0,0,1);
+				}
+
 				UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
 
 				if ( unity_StereoEyeIndex == 0 ) { // Left eye / desktop view

@@ -20,6 +20,7 @@
 //                   of drawbacks including: not working for non-shadowcasting
 //                   objects, breaking MSAA, & requiring a real-time light in
 //                   the scene to force Unity to render _CDT.
+//  1.5 (2024-11-17) Don't render in handheld camera.
 //
 // ============================================================================
 //  How it works
@@ -120,6 +121,9 @@ Shader "Aurycat/PortalView"
 			sampler2D _ViewTexL;
 			sampler2D _ViewTexR;
 
+			uniform float _VRChatCameraMode;
+			uniform float _VRChatMirrorMode;
+
 			struct appdata
 			{
 				float4 vertex : POSITION;
@@ -149,6 +153,14 @@ Shader "Aurycat/PortalView"
 
 			half4 frag(v2f i) : SV_Target
 			{
+				// Output black when rendering in handheld camera, which would
+				// otherwise look very broken. Same for rendering in mirror,
+				// though mirrors are already handled by them not rendering the
+				// Water layer. But add a check for mirrors for good measure.
+				if (_VRChatCameraMode == 1 || _VRChatCameraMode == 2 || _VRChatMirrorMode != 0) {
+					return half4(0,0,0,1);
+				}
+
 				UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
 
 				if ( unity_StereoEyeIndex == 0 ) { // Left eye / desktop view
