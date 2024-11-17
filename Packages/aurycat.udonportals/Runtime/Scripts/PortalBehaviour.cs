@@ -23,6 +23,7 @@
 //                   properties in the inspector again. Add 'behaviour mode' for
 //                   physics only or visuals only portals. Add momentum snapping option.
 //                   Support user-changed FOVs in Desktop play.
+//  1.5 (2024-11-17) Support Holoport locomotion.
 
 using UdonSharp;
 using UnityEngine;
@@ -220,6 +221,18 @@ public class PortalBehaviour : UdonSharpBehaviour
 	 */
 	[Tooltip("The distance from the portal surface where the player will teleport when their head crosses. Read this property's documentation in PortalBehaviour.cs before changing!")]
 	public float teleportPlaneOffset = 0f;
+
+	/**
+	 * Holoport locomotion breaks the normal method for detecting walking
+	 * through the portal, and the method for teleporting. There is a fix,
+	 * but the detection method is a bit of a hack and relies on comparing
+	 * avatar bone positions to tracking positions. I'm worried that it could
+	 * possibly cause problems in certain weird use cases (situations where
+	 * an avatar is moved separately from the viewpoint -- e.g. MMD worlds)
+	 * so this option lets you disable the Holoport fix if needed.
+	 */
+	[Tooltip("Read this property's documentation in PortalBehaviour.cs before changing!")]
+	public bool useHoloportFix = true;
 
 	/**
 	 * Normally portals use an "oblique projection matrix" to solve a problem
@@ -442,10 +455,14 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private int widthCache = 0;
 	private int heightCache = 0;
 
-	// Whether the local player was previously in front of the portal on the
-	// most recent check
-	private bool prevInFront = false;
-	private bool headInTrigger = false;
+	// Properties to keep track of the player while they're within the
+	// portal trigger:
+	// Player was in front of the portal on the last check
+	private bool prevInFront;
+	// Player's viewpoint head pos was inside the trigger on the last check
+	private bool trackingHeadInTrigger;
+	// Player was using Holoport locomotion on the last check
+	private bool isHoloport;
 
 	// Rigidbody that was in front of the portal on the most recent check.
 	// If support is added for multiple rigidbodies moving through the
@@ -462,10 +479,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	// Vertical FOV cached from desktopFOVDetector
 	private int desktopFOV = 60;
-	private bool registeredFOVDetector = false;
+	private bool registeredFOVDetector;
 
-	// Bool for storing if the player is in HoloPort locomotion
-	private bool isHoloPort;
 
 	void OnEnable()
 	{
@@ -644,7 +659,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 		 */
 
 		prevInFront = false;
-		headInTrigger = false;
+		trackingHeadInTrigger = false;
+		isHoloport = false;
 
 	} /* OnEnable */
 
@@ -682,7 +698,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 		widthCache = 0;
 		heightCache = 0;
 		prevInFront = false;
-		headInTrigger = false;
+		trackingHeadInTrigger = false;
+		isHoloport = false;
 		prevBody = null;
 		localPlayer = null;
 		inVR = false;
@@ -792,7 +809,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 			return;
 		}
 
-		VRCPlayerApi.TrackingData playerHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
+		VRCPlayerApi.TrackingData trackingHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
 
 		int w = (int)dummyCameraL.pixelRect.width;
 		int h = (int)dummyCameraL.pixelRect.height;
@@ -824,7 +841,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 		// Move the virtual head to its appropriate position relative to the opposite portal.
 		portalCameraRoot.SetPositionAndRotation(transform.position, transform.rotation);
-		virtualHead.SetPositionAndRotation(playerHead.position, playerHead.rotation);
+		virtualHead.SetPositionAndRotation(trackingHead.position, trackingHead.rotation);
 		virtualHead.RotateAround(transform.position, transform.up, 180);
 		portalCameraRoot.SetPositionAndRotation(partner.position, partner.rotation);
 
@@ -852,7 +869,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 			// The GetSide check is detecting whether the portal camera is in
 			// front of the partner portal - effectively in front of its own
 			// near plane. We skip oblique projection if that happens.
-			if (!headInTrigger || !ocpDisablePlane.GetSide(offsetL.position)) {
+			if (!trackingHeadInTrigger || !ocpDisablePlane.GetSide(offsetL.position)) {
 				Vector4 clipPlane = _CameraSpacePlane(portalCameraL.worldToCameraMatrix, ocpPos, ocpNormal);
 				Matrix4x4 projection = portalCameraL.CalculateObliqueMatrix(clipPlane);
 				portalCameraL.projectionMatrix = projection;
@@ -862,7 +879,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 		if (inVR) {
 			if (_useObliqueProjection) {
-				if (!headInTrigger || !ocpDisablePlane.GetSide(offsetR.position)) {
+				if (!trackingHeadInTrigger || !ocpDisablePlane.GetSide(offsetR.position)) {
 					Vector4 clipPlane = _CameraSpacePlane(portalCameraR.worldToCameraMatrix, ocpPos, ocpNormal);
 					Matrix4x4 projection = portalCameraR.CalculateObliqueMatrix(clipPlane);
 					portalCameraR.projectionMatrix = projection;
@@ -897,7 +914,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 	public override void OnPlayerTriggerExit(VRCPlayerApi player)
 	{
 		prevInFront = false;
-		headInTrigger = false;
+		trackingHeadInTrigger = false;
+		isHoloport = false;
 	}
 
 	public override void OnPlayerTriggerStay(VRCPlayerApi player)
@@ -905,30 +923,66 @@ public class PortalBehaviour : UdonSharpBehaviour
 		if (!player.isLocal || !Utilities.IsValid(localPlayer)) {
 			return;
 		}
-		// 'headInTrigger' is used for rendering when _useObliqueProjection is on
+		// 'trackingHeadInTrigger' is used for rendering when _useObliqueProjection is on
 		if (_noPhysics && !_useObliqueProjection) {
 			return;
 		}
 
-		VRCPlayerApi.TrackingData playerHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
-
-		Vector3 holoportHeadPos = localPlayer.GetBonePosition(HumanBodyBones.Head);
-		isHoloPort = Vector3.Distance(playerHead.position, holoportHeadPos) > 1;
-		Vector3 headPosition = isHoloPort ? holoportHeadPos : playerHead.position;
+		VRCPlayerApi.TrackingData trackingHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
 
 		// ClosestPoint is the only way to manually check if a point is inside a collider.
-		headInTrigger = (trigger.ClosestPoint(headPosition) == headPosition);
+		trackingHeadInTrigger = (trigger.ClosestPoint(trackingHead.position) == trackingHead.position);
 
 		if (_noPhysics) {
 			return;
 		}
 
+		Vector3 playerHeadPos;
+		bool playerHeadInTrigger = trackingHeadInTrigger;
+		if (inVR && useHoloportFix) {
+			// Detect if the player is moving with Holoport locomotion. In Holoport
+			// locomotion, the avatar head (head bone pos) will be distant from the
+			// viewpoint head (tracking data head). Teleporting behavior needs to
+			// be adjusted in that case. Thanks to Superbstingray for coming up with
+			// this Holoport detection method and the teleporting fixes for it!
+			Vector3 holoportHeadPos = localPlayer.GetBonePosition(HumanBodyBones.Head);
+			if (holoportHeadPos != Vector3.zero) { // Zero if no head bone
+				isHoloport = Vector3.Distance(trackingHead.position, holoportHeadPos) > 1;
+			}
+			else {
+				isHoloport = false;
+			}
+
+			if (isHoloport) {
+				playerHeadPos = holoportHeadPos;
+
+				// When using Holoport, there's a difference between the player's
+				// head being in the trigger for the purposes of deciding when to
+				// teleport, and the player's head being in the trigger for the
+				// purposes of rendering the visuals. Visuals need tracking head
+				// pos (since it's where you're actually looking from), but
+				// teleporting needs avatar head pos.
+				// The difference is extremely subtle and only causes a problem
+				// when looking at the portal from an extremely oblique angle
+				// while the player's avatar is Holoported in front of the portal.
+				// A rare condition, but I have obsessions okay let me be like this
+				playerHeadInTrigger = (trigger.ClosestPoint(playerHeadPos) == playerHeadPos);
+			}
+			else {
+				playerHeadPos = trackingHead.position;
+			}
+		}
+		else {
+			isHoloport = false;
+			playerHeadPos = trackingHead.position;
+		}
+
 		// Check that the player's head is actually in the trigger, so we don't
 		// teleport if the player is merely walking beside the portal.
-		if (headInTrigger)
+		if (playerHeadInTrigger)
 		{
 			Plane p = new Plane(-transform.forward, transform.position - (transform.forward*teleportPlaneOffset));
-			bool inFront = p.GetSide(headPosition);
+			bool inFront = p.GetSide(playerHeadPos);
 
 			if (prevInFront && !inFront) {
 				// Player crossed from front to back, teleport them
@@ -960,12 +1014,35 @@ public class PortalBehaviour : UdonSharpBehaviour
 			partnerPortalBehaviour.OnWillReceivePlayer();
 		}
 
-		VRCPlayerApi.TrackingData origin = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Origin);
-		VRCPlayerApi.TrackingData avatarRoot = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.AvatarRoot);
-		VRCPlayerApi.TrackingData head = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
+		VRCPlayerApi.TrackingData trackingHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
 
-		Vector3 activeOrigin = isHoloPort ? avatarRoot.position : origin.position;
-		Vector3 activeHeadPos = isHoloPort ? localPlayer.GetBonePosition(HumanBodyBones.Head) : head.position;
+		// When a player is currently moving with Holoport locomotion, their
+		// avatar will be distant from their viewpoint. Teleport based on
+		// their avatar location so that their avatar ends up in the correct
+		// spot after teleporting. Thankfully, when calling TeleportTo, VRChat
+		// automatically resets the viewpoint to the teleport destination.
+		//
+		// Note we can't use avatar & head bone position with normal locomotion
+		// because it won't be perfectly aligned with the VR viewpoint, meaning
+		// the teleport won't be visually seamless. Unlike normal locomotion,
+		// Holoport's whole purpose is to snap to a new viewpoint, so it's okay
+		// that the teleport isn't visually seamless.
+		Vector3 playerOriginPos;
+		Quaternion playerOriginRot;
+		Vector3 playerHeadPos;
+		if (isHoloport) {
+			VRCPlayerApi.TrackingData avatarRoot = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.AvatarRoot);
+			playerOriginPos = avatarRoot.position;
+			playerOriginRot = avatarRoot.rotation;
+			playerHeadPos = localPlayer.GetBonePosition(HumanBodyBones.Head);
+		}
+		else {
+			VRCPlayerApi.TrackingData trackingOrigin = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Origin);
+			playerOriginPos = trackingOrigin.position;
+			playerOriginRot = trackingOrigin.rotation;
+			playerHeadPos = trackingHead.position;
+		}
+
 		// Don't use transform/partner.TransformPoint because it accounts for
 		// scale, which we don't want -- otherwise a portal pair that have
 		// different world scales (even if the surfaces are identical size
@@ -976,7 +1053,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		// Calculate the new position of the player's *head*, not their origin.
 		// The player teleports when their head passes through the surface, so
 		// the relative position of the head is what needs to remain constant.
-		Vector3 localHeadPos = selfWorldToLocalMat.MultiplyPoint3x4(activeHeadPos);
+		Vector3 localHeadPos = selfWorldToLocalMat.MultiplyPoint3x4(playerHeadPos);
 		localHeadPos = local180 * localHeadPos;
 		Vector3 newHeadPos = partnerLocalToWorldMat.MultiplyPoint3x4(localHeadPos);
 
@@ -988,13 +1065,13 @@ public class PortalBehaviour : UdonSharpBehaviour
 		float inputY = transform.rotation.eulerAngles.y;
 		float outputY = partnerInvRot.eulerAngles.y;
 		float diffY = outputY - inputY;
-		float playerY = isHoloPort ? avatarRoot.rotation.eulerAngles.y : origin.rotation.eulerAngles.y;
+		float playerY = playerOriginRot.eulerAngles.y;
 		float newY = playerY + diffY;
 		Quaternion newRot = Quaternion.Euler(0, newY, 0);
 
 		// From the newHeadPos and rotation delta, calculate the new origin
 		// position which is what we need for teleporting.
-		Vector3 headToOrigin = activeOrigin - activeHeadPos;
+		Vector3 headToOrigin = playerOriginPos - playerHeadPos;
 		headToOrigin = Quaternion.AngleAxis(diffY, Vector3.up) * headToOrigin;
 		Vector3 newPos = newHeadPos + headToOrigin;
 
@@ -1030,7 +1107,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 				float playerVertAlignment = Mathf.Abs(playerVel.normalized.y);
 				if ( playerVertAlignment > SNAP_NEARLY_EXACT ||
 				     (playerVertAlignment > SNAP_CLOSE &&
-				      Vector3.Dot((head.rotation * Vector3.forward), transform.forward) > LOOKING_AT_PORTAL) )
+				      Vector3.Dot((trackingHead.rotation * Vector3.forward), transform.forward) > LOOKING_AT_PORTAL) )
 				{
 					// Snap! Player must be moving towards the portal,
 					// so we can ignore the direction of their velocity.
@@ -1086,7 +1163,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 		}
 		Vector3 newVel = localToPartnerRot * localVel;
 
-		if(!isHoloPort) {
 		// Do teleport
 		#if UNITY_EDITOR
 			// AlignRoomWithSpawnPoint doesn't work properly in ClientSim
@@ -1096,19 +1172,21 @@ public class PortalBehaviour : UdonSharpBehaviour
 				VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignPlayerWithSpawnPoint,
 				/*lerpOnRemote=*/false);
 		#else
-			localPlayer.TeleportTo(
-				newPos,
-				newRot,
-				VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignRoomWithSpawnPoint,
-				/*lerpOnRemote=*/false);
+			if (!isHoloport) {
+				localPlayer.TeleportTo(
+					newPos,
+					newRot,
+					VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignRoomWithSpawnPoint,
+					/*lerpOnRemote=*/false);
+			}
+			else {
+				localPlayer.TeleportTo(
+					newPos,
+					newRot,
+					VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignPlayerWithSpawnPoint,
+					/*lerpOnRemote=*/false);
+			}
 		#endif
-		} else {
-			localPlayer.TeleportTo(
-				newPos,
-				newRot,
-				VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignPlayerWithSpawnPoint,
-				/*lerpOnRemote=*/false);
-		}
 
 		localPlayer.SetVelocity(newVel);
 	}
@@ -1307,10 +1385,10 @@ public class PortalBehaviour : UdonSharpBehaviour
 	public void OnWillReceivePlayer() {
 		// After being teleported here, there may be a few frames of
 		// rendering the portal before OnPlayerTriggerStay is called
-		// to update `headInTrigger`. That can lead to some flicker
+		// to update `trackingHeadInTrigger`. That can lead to flicker
 		// due to wrongly using an oblique near plane while an eye
 		// is still in the portal. Set this true assuming that the
 		// head will always be in the trigger after teleporting.
-		headInTrigger = true;
+		trackingHeadInTrigger = true;
 	}
 }

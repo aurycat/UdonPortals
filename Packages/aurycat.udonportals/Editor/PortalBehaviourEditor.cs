@@ -28,6 +28,7 @@ public class PortalBehaviourEditor : Editor
 	SerializedProperty stereoSeparationModeProp;
 	SerializedProperty trackingScaleProp;
 	SerializedProperty manualStereoSeparationProp;
+	SerializedProperty useHoloportFixProp;
 
 	SerializedProperty portalCameraPrefabProp;
 	SerializedProperty trackingScalePrefabProp;
@@ -50,6 +51,7 @@ public class PortalBehaviourEditor : Editor
 		viewTexRProp = serializedObject.FindProperty("viewTexR");
 
 		teleportPlaneOffsetProp = serializedObject.FindProperty("teleportPlaneOffset");
+		useHoloportFixProp = serializedObject.FindProperty("useHoloportFix");
 
 		useObliqueProjectionProp = serializedObject.FindProperty("_useObliqueProjection");
 		obliqueClipPlaneOffsetProp = serializedObject.FindProperty("obliqueClipPlaneOffset");
@@ -225,6 +227,7 @@ public class PortalBehaviourEditor : Editor
 				GUILayout.BeginVertical("box");
 				GUILayout.Space(5);
 				EditorGUILayout.PropertyField(teleportPlaneOffsetProp);
+				EditorGUILayout.PropertyField(useHoloportFixProp);
 				GUILayout.Space(5);
 				GUILayout.EndVertical();
 				GUILayout.Space(5);
