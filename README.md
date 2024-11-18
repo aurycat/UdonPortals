@@ -2,7 +2,7 @@
 
 This prefab lets you create visual portals in VRChat worlds that can be looked through, walked through, fallen through, and appear as high quality as a Mirror. Even pickups can be thrown through the portals!  
 
-![Looping video of walking through portals](.github/resources/videodemo.gif)
+https://github.com/user-attachments/assets/03e459e4-3762-459f-a64d-7842d7d798e9
 
 
 ## Download
