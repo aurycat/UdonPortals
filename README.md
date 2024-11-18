@@ -59,7 +59,7 @@ One potential way of fixing this is to have colliders behind the portal turn off
 
 ## Credits
 
-Created by aurycat. Thanks to Nestorboy, Merlin, kingBigfootia, Esska, and my patient friends who helped me test it over and over :)
+Created by aurycat. Thanks to Nestorboy, Merlin, kingBigfootia, Esska, Superbstingray, and my patient friends who helped me test it over and over :)
 
 Check out my [Portals Prefab Demo](https://vrchat.com/home/world/wrld_c6dc655d-e665-4a26-abc9-da0617257bc0) world on VRChat to see some examples of what you can make with this prefab.
 
