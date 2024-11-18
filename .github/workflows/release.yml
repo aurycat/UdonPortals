@@ -1,3 +1,7 @@
+# Note to self! Don't manually create a GitHub release. Update the package.json
+# in a commit, and then run this workflow from the Actions tab. It will generate
+# release automatically.
+
 name: Build Release
 
 on:
