@@ -32,6 +32,7 @@ using VRC.Udon;
 using System;
 using UnityEditor;
 using VRC.SDK3.Components;
+using VRC.SDK3.Rendering;
 
 // See 'operatingMode' property documentation below for info
 public enum PortalBehaviourMode
@@ -301,63 +302,12 @@ public class PortalBehaviour : UdonSharpBehaviour
 	[Tooltip("Read this property's documentation in PortalBehaviour.cs before changing!")]
 	public float obliqueClipPlaneDisableDist = 0.05f;
 
-	/**
-	 * In order for the portal to look correct in VR, the player's avatar's
-	 * stereo separation (aka IPD, aka distance between eyes) is needed. Note
-	 * it's NOT the headset's IPD! The value changes with avatar height.
-	 *
-	 * The stereo separation value is not provided natively to Udon, but there
-	 * are some ways of getting it indirectly. Notably, by finding "tracking
-	 * scale", which is the proportion of how much the avatar's head moves in
-	 * game compared to how much the user's head moves in their real playspace.
-	 * Multiplying the tracking scale by the default stereo separation, which
-	 * can be read from the dummy VR cameras, gives us the avatar's IPD.
-	 *
-	 * There are two ways (that I'm aware of as of this writing) to accurately
-	 * get the tracking scale:
-	 *
-	 *  A. Active GameObjects that have an Audio Listener component have their
-	 *     scale set to 1/trackingScale. Don't ask me why.
-	 *
-	 *  B. Using Merlin's PlayspaceTracking prefab:
-	 *     https://github.com/MerlinVR/PlayspaceTracking
-	 *     The scale of the HeadRoot object is set to the tracking scale using
-	 *     some clever Camera tricks. However this method suffers from floating
-	 *     point precision error in large worlds, and also jitters a bit when
-	 *     switching avatars.
-	 *
-	 * Both of these methods are a hack and could easily break at any time with
-	 * a VRChat update, but method A is the fastest and most accurate way right
-	 * now. Also the Audio Listener is easy to instantiate from a prefab at
-	 * runtime. Therefore, that is the default method for UdonPortals.
-	 *
-	 * But to account for the fact that the Audio Listener mode may break
-	 * eventually, this property lets you select a different way to determine
-	 * stero separation. The possible values are:
-	 *
-	 *  0: Default; uses Method A. Stereo separation is computed as:
-	 *        (1.0/trackingScale.localScale.x) * default_stereo_separation
-	 *     Also, if the 'trackingScale' property is set to null, the TrackingScale
-	 *     prefab is automatically instantiated at /PortalTrackingScale if it
-	 *     doesn't already exist. 'trackingScale' is then set to that object.
-	 *
-	 *  1: Stereo separation is computed as:
-	 *        trackingScale.localScale.x * default_stereo_separation
-	 *     If the default method breaks, use this mode along with Method B,
-	 *     Merlin's PlayspaceTracking. Set the 'trackingScale' object to the
-	 *     HeadRoot object in Merlin's prefab.
-	 *
-	 *  2: Stereo separation is taken directly from the 'manualStereoSeparation'
-	 *     property.
-	 */
+	// TODO: Remove(?)
 	public int stereoSeparationMode = 0;
 	public Transform trackingScale = null;
 	public float manualStereoSeparation = 0f; // in meters
 
-	/**
-	 * The most recent stereo separation value used by the portal. Only updates
-	 * when the portal is rendering. (Read only)
-	 */
+	// TODO: Remove(?)
 	private float _stereoSeparation = 0f; // in meters
 	public float stereoSeparation {
 		get => _stereoSeparation;
@@ -477,9 +427,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private bool _noVisuals;
 	private bool _noPhysics;
 
-	// Vertical FOV cached from desktopFOVDetector
-	private int desktopFOV = 60;
-	private bool registeredFOVDetector;
+	private bool refreshCameraSettingsNextFrame;
+	private bool texturesNeedRefresh;
 
 
 	void OnEnable()
@@ -546,23 +495,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 				Debug.LogWarning($"Changing layer of portal '{name}' to Water (4)");
 				gameObject.layer = 4;
 			}
-
-			if (trackingScale == null) {
-				if (stereoSeparationMode == 0) {
-					trackingScale = InstantiateTrackingScale();
-					if (trackingScale == null) {
-						Debug.LogError($"Portal '{name}' does not have the Tracking Scale Prefab property set and the GameObject /PortalTrackingScale doesn't exist in the scene. Please set Tracking Scale Prefab to the 'TrackingScale' prefab asset provided in the package.");
-						return;
-					}
-				} else if (stereoSeparationMode == 1) {
-					Debug.LogError($"Portal '{name}' does not have the 'trackingScale' property set on stereoSeparationMode=1.");
-					return;
-				}
-			}
-
-			if (referenceCamera == null) {
-				Debug.LogWarning($"Portal '{name}' does not have a reference camera set.");
-			}
 		}
 
 
@@ -611,20 +543,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 			offsetR.gameObject.SetActive(inVR);
 
 			/*
-			 * Get FOV in desktop
-			 */
-			if (!inVR && !registeredFOVDetector) {
-				if (desktopFOVDetector != null) {
-					desktopFOVDetector.Register(this);
-					registeredFOVDetector = true;
-					desktopFOV = desktopFOVDetector.DetectedFOV;
-				}
-				else {
-					Debug.LogWarning($"Portal '{name}' does not have its desktop FOV detector set. The portal will not look correct if the player changes their FOV on desktop.");
-				}
-			}
-
-			/*
 			 * Configure portal cameras.
 			 */
 
@@ -639,7 +557,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 			_UpdateLayerMask(_layerMask);
 
-			RefreshTextures();
+			texturesNeedRefresh = true;
 
 			renderer.material.SetTexture("_ViewTexL", viewTexL);
 
@@ -648,8 +566,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 				dummyCameraL.stereoTargetEye = StereoTargetEyeMask.Left;
 				dummyCameraR.stereoTargetEye = StereoTargetEyeMask.Right;
-				_ApplyDummyCameraProperties(portalCameraL, dummyCameraL, Camera.StereoscopicEye.Left);
-				_ApplyDummyCameraProperties(portalCameraR, dummyCameraR, Camera.StereoscopicEye.Right);
 			}
 		}
 
@@ -761,58 +677,12 @@ public class PortalBehaviour : UdonSharpBehaviour
 	}
 
 	/**
-	 * This should be called if the reference camera changes, e.g. if the skybox
-	 * changes, while the portal is enabled.
-	 */
-	public void RefreshReferenceCamera()
-	{
-		if (portalCameraL != null) {
-			_ApplyReferenceCamera(portalCameraL);
-			_ApplyReferenceCamera(portalCameraR);
-		}
-	}
-
-	/**
-	 * This should be called when the render textures need to be recreated,
-	 * e.g. when their size changes, while the portal is enabled. This should
-	 * not need to be called manually, because it is automatically called
-	 * when the screen size or textureResolution changes.
+	 * This should be called if the viewTexL or viewTexR properties are
+	 * changed externally while the portal is active.
 	 */
 	public void RefreshTextures()
 	{
-		if (portalCameraL != null) {
-			widthCache = (int)dummyCameraL.pixelRect.width;
-			heightCache = (int)dummyCameraL.pixelRect.height;
-
-			_SetupTexture(viewTexL, portalCameraL);
-			if (inVR) {
-				_SetupTexture(viewTexR, portalCameraR);
-			}
-		}
-	}
-
-	/**
-	 * Instantiates (or returns it, if already created) the trackingScale
-	 * prefab. This object is used to determine the local player's avatar
-	 * scale using the "Method A" (Audio Listener) described in the
-	 * `stereoSeparationMode` property description above.
-	 *
-	 * This is called automatically by the portal on enable if
-	 * `stereoSeparationMode` is 0, so you shouldn't need to call this
-	 * except maybe to use the scale for debug output.
-	 */
-	public Transform InstantiateTrackingScale()
-	{
-		GameObject trackingScaleObj = GameObject.Find("/PortalTrackingScale");
-		if (trackingScaleObj == null) {
-			if (trackingScalePrefab != null) {
-				trackingScaleObj = Instantiate(trackingScalePrefab);
-				trackingScaleObj.name = "PortalTrackingScale";
-			} else {
-				return null;
-			}
-		}
-		return trackingScaleObj.transform;
+		texturesNeedRefresh = true;
 	}
 
 	// Local vars within OnWillRenderObject, just placed here to avoid
@@ -829,47 +699,70 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 		VRCPlayerApi.TrackingData trackingHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
 
-		int w = (int)dummyCameraL.pixelRect.width;
-		int h = (int)dummyCameraL.pixelRect.height;
-		if (w != widthCache || h != heightCache) {
-			RefreshTextures();
-		}
+		// Note this is not correct, OnWillRenderObject could be called for
+		// other cameras in the scene, e.g. the PhotoCamera. But there is
+		// no API yet to tell which camera is rendering.
+		//   https://feedback.vrchat.com/sdk-bug-reports/p/vrccamerasettings-property-to-tell-which-camera-is-currently-rendering
+		VRCCameraSettings renderingCamera = VRCCameraSettings.ScreenCamera;
 
-		if (inVR) {
-			// "Undo" the forced transformation applied to the dummy cameras
-			// by Unity. This puts them into the same position/rotation as
-			// the portal cameras.
-			invertRotationL.localRotation = Quaternion.Inverse(dummyCameraL.transform.localRotation);
-			invertPositionL.localPosition = -dummyCameraL.transform.localPosition;
-			invertRotationR.localRotation = Quaternion.Inverse(dummyCameraR.transform.localRotation);
-			invertPositionR.localPosition = -dummyCameraR.transform.localPosition;
-
-			// Calculate stereo separation. This changes based on avatar size.
-			if (stereoSeparationMode == 0) {
-				_stereoSeparation = (1f/trackingScale.localScale.x) * dummyCameraL.stereoSeparation;
-			} else if (stereoSeparationMode == 1) {
-				_stereoSeparation = trackingScale.localScale.x * dummyCameraL.stereoSeparation;
-			} else {
-				_stereoSeparation = manualStereoSeparation;
+		int w = renderingCamera.PixelWidth;
+		int h = renderingCamera.PixelHeight;
+		if (w != widthCache || h != heightCache || texturesNeedRefresh) {
+			widthCache = w;
+			heightCache = h;
+			_SetupTexture(viewTexL, portalCameraL);
+			if (inVR) {
+				_SetupTexture(viewTexR, portalCameraR);
 			}
-			float centerToEyeDist = _stereoSeparation * 0.5f;
-			offsetL.localPosition = new Vector3(-centerToEyeDist, 0f, 0f);
-			offsetR.localPosition = new Vector3(centerToEyeDist, 0f, 0f);
+			texturesNeedRefresh = false;
 		}
 
 		// Move the virtual head to its appropriate position relative to the opposite portal.
 		portalCameraRoot.SetPositionAndRotation(transform.position, transform.rotation);
-		virtualHead.SetPositionAndRotation(trackingHead.position, trackingHead.rotation);
+		virtualHead.SetPositionAndRotation(renderingCamera.Position, renderingCamera.Rotation);
+		if (inVR) {
+			offsetL.SetPositionAndRotation(
+				VRCCameraSettings.GetEyePosition(Camera.StereoscopicEye.Left),
+				VRCCameraSettings.GetEyeRotation(Camera.StereoscopicEye.Left));
+			offsetR.SetPositionAndRotation(
+				VRCCameraSettings.GetEyePosition(Camera.StereoscopicEye.Right),
+				VRCCameraSettings.GetEyeRotation(Camera.StereoscopicEye.Right));
+		}
 		virtualHead.RotateAround(transform.position, transform.up, 180);
 		portalCameraRoot.SetPositionAndRotation(partner.position, partner.rotation);
 
+		// Copy properties from the rendering camera
+		portalCameraL.farClipPlane        = renderingCamera.FarClipPlane;
+		portalCameraL.nearClipPlane       = renderingCamera.NearClipPlane;
+		portalCameraL.fieldOfView         = renderingCamera.FieldOfView;
+		portalCameraL.aspect              = renderingCamera.Aspect;
+		portalCameraL.allowHDR            = renderingCamera.AllowHDR;
+		portalCameraL.backgroundColor     = renderingCamera.BackgroundColor;
+		portalCameraL.clearFlags          = renderingCamera.ClearFlags;
+		portalCameraL.useOcclusionCulling = renderingCamera.UseOcclusionCulling;
+
 		if (inVR) {
-			// Set portal cameras to match dummy cameras' setings
-			_ApplyDummyCameraProperties(portalCameraL, dummyCameraL, Camera.StereoscopicEye.Left);
-			_ApplyDummyCameraProperties(portalCameraR, dummyCameraR, Camera.StereoscopicEye.Right);
+			portalCameraR.farClipPlane        = renderingCamera.FarClipPlane;
+			portalCameraR.nearClipPlane       = renderingCamera.NearClipPlane;
+			portalCameraR.fieldOfView         = renderingCamera.FieldOfView;
+			portalCameraR.aspect              = renderingCamera.Aspect;
+			portalCameraR.allowHDR            = renderingCamera.AllowHDR;
+			portalCameraR.backgroundColor     = renderingCamera.BackgroundColor;
+			portalCameraR.clearFlags          = renderingCamera.ClearFlags;
+			portalCameraR.useOcclusionCulling = renderingCamera.UseOcclusionCulling;
+
+			dummyCameraL.farClipPlane         = renderingCamera.FarClipPlane;
+			dummyCameraL.nearClipPlane        = renderingCamera.NearClipPlane;
+			dummyCameraL.fieldOfView          = renderingCamera.FieldOfView;
+			dummyCameraL.aspect               = renderingCamera.Aspect;
+			dummyCameraR.farClipPlane         = renderingCamera.FarClipPlane;
+			dummyCameraR.nearClipPlane        = renderingCamera.NearClipPlane;
+			dummyCameraR.fieldOfView          = renderingCamera.FieldOfView;
+			dummyCameraR.aspect               = renderingCamera.Aspect;
+			portalCameraL.projectionMatrix = dummyCameraL.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
+			portalCameraR.projectionMatrix = dummyCameraR.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right);
 		}
 		else {
-			portalCameraL.fieldOfView = desktopFOV;
 			portalCameraL.ResetProjectionMatrix();
 		}
 
@@ -1316,31 +1209,12 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private void _ResetCamera(Camera cam)
 	{
 		_ResetTransform(cam.transform);
-		_ApplyReferenceCamera(cam);
 
 		cam.enabled         = false;
 		cam.cullingMask     = 0;
 		cam.stereoTargetEye = StereoTargetEyeMask.None;
 		cam.targetTexture   = null;
 		cam.depth           = -10;
-
-		if (!inVR) {
-			cam.fieldOfView = desktopFOV;
-			cam.ResetProjectionMatrix();
-		}
-	}
-
-	private void _ApplyReferenceCamera(Camera cam)
-	{
-		if (referenceCamera != null) {
-			cam.allowHDR            = referenceCamera.allowHDR;
-			cam.backgroundColor     = referenceCamera.backgroundColor;
-			cam.clearFlags          = referenceCamera.clearFlags;
-			cam.useOcclusionCulling = referenceCamera.useOcclusionCulling;
-			cam.farClipPlane        = referenceCamera.farClipPlane;
-			// Clamp reference cam near-plane like VRC does. See ClientSimSceneManager.cs
-			cam.nearClipPlane       = Mathf.Clamp(referenceCamera.nearClipPlane, 0.01f, 0.05f);
-		}
 	}
 
 	private void _SetupTexture(RenderTexture tex, Camera cam)
@@ -1353,16 +1227,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 		// Need to set to null first for the change to apply correctly, dunno why
 		cam.targetTexture = null;
 		cam.targetTexture = tex;
-	}
-
-	// Only used in VR
-	private void _ApplyDummyCameraProperties(Camera to, Camera frm, Camera.StereoscopicEye eye)
-	{
-		to.farClipPlane     = frm.farClipPlane;
-		to.nearClipPlane    = frm.nearClipPlane;
-		to.fieldOfView      = frm.fieldOfView;
-		to.aspect           = frm.aspect;
-		to.projectionMatrix = frm.GetStereoProjectionMatrix(eye);
 	}
 
 	// Given position/normal of the plane, calculates plane in camera space.
@@ -1394,13 +1258,13 @@ public class PortalBehaviour : UdonSharpBehaviour
 			return;
 		}
 		_textureResolution = val;
-		RefreshTextures();
+		texturesNeedRefresh = true;
 	}
 
-	// Called from the FOVDetector
-	public void OnFOVChanged()
+	// "It is recommended to do minimal processing [in this event] to avoid affecting performance." 
+	public override void OnVRCCameraSettingsChanged(VRCCameraSettings camera)
 	{
-		desktopFOV = desktopFOVDetector.DetectedFOV;
+		refreshCameraSettingsNextFrame = true;
 	}
 
 	// Called by the partner portal (if the partner is a PortalBehaviour)

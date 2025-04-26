@@ -2626,19 +2626,19 @@ MonoBehaviour:
       Data: 
     - Name: $k
       Entry: 1
-      Data: desktopFOV
+      Data: refreshCameraSettingsNextFrame
     - Name: $v
       Entry: 7
       Data: 134|UdonSharp.Compiler.FieldDefinition, UdonSharp.Editor
     - Name: <Name>k__BackingField
       Entry: 1
-      Data: desktopFOV
+      Data: refreshCameraSettingsNextFrame
     - Name: <UserType>k__BackingField
       Entry: 9
-      Data: 4
+      Data: 35
     - Name: <SystemType>k__BackingField
       Entry: 9
-      Data: 4
+      Data: 35
     - Name: <SyncMode>k__BackingField
       Entry: 7
       Data: System.Nullable`1[[UdonSharp.UdonSyncMode, UdonSharp.Runtime]], mscorlib
@@ -2675,13 +2675,13 @@ MonoBehaviour:
       Data: 
     - Name: $k
       Entry: 1
-      Data: registeredFOVDetector
+      Data: texturesNeedRefresh
     - Name: $v
       Entry: 7
       Data: 136|UdonSharp.Compiler.FieldDefinition, UdonSharp.Editor
     - Name: <Name>k__BackingField
       Entry: 1
-      Data: registeredFOVDetector
+      Data: texturesNeedRefresh
     - Name: <UserType>k__BackingField
       Entry: 9
       Data: 35
