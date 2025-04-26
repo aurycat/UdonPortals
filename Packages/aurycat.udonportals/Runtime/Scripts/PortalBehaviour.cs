@@ -682,6 +682,24 @@ public class PortalBehaviour : UdonSharpBehaviour
 			viewTexR.Release();
 		}
 
+		// In the editor, reset the texture size when the portal turns off.
+		// (Note OnDisable gets called when exiting play mode.)
+		// The portal asset file is affected by changing texture size, which
+		// means every time you run play mode with a different Game window
+		// size, the texture file changes, which makes Git think there are
+		// changes to be committed. Reset the files to always be 256x256
+		// to avoid Git changes after every time running play mode!
+		#if UNITY_EDITOR
+			if (viewTexL != null) {
+				viewTexL.width = 256;
+				viewTexL.height = 256;
+			}
+			if (viewTexR != null) {
+				viewTexR.width = 256;
+				viewTexR.height = 256;
+			}
+		#endif
+
 		virtualHead = null;
 		offsetL = null;
 		offsetR = null;
