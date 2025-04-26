@@ -1225,8 +1225,13 @@ public class PortalBehaviour : UdonSharpBehaviour
 		// not the owner, don't do anything. Also, clear prevBody in case we
 		// *lose* ownership while it's in the trigger.
 		if (!Networking.IsOwner(collider.gameObject)) {
-			prevBody = null;
-			return;
+			// Only if it has an object sync. If there's no object sync,
+			// assume it's a local object and ownership doesn't matter.
+			// This assumption may not always be accurate.
+			if (collider.GetComponent<VRCObjectSync>() != null) {
+				prevBody = null;
+				return;
+			}
 		}
 
 		Plane p = new Plane(-transform.forward, transform.position);
