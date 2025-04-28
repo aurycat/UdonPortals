@@ -86,15 +86,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 	public PortalBehaviour partnerPortalBehaviour;
 
 	/**
-	 * The world reference camera is used to copy properties such as the
-	 * clearflags to the portal cameras. Properties are only updated when
-	 * the portal is enabled or when RefreshReferenceCamera() is called.
-	 */
-	[Tooltip("Set this to the world reference camera to copy its properties to the portal cameras.")]
-	public Camera referenceCamera;
-
-
-	/**
 	 * The Unity layers to show through the portal. Default value is to show:
 	 *  Default, TransparentFX, Ignore Raycast, Interactive, Player,
 	 *  Environment, Pickup, PickupNoEnvironment, Walkthrough, MirrorReflection,
@@ -165,21 +156,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 	 */
 	[Tooltip("When enabled, the portal attempts to align the player's momentum to the portal orientation when traveling through it. Additionally it has some extra snapping behavior for flat portals (i.e. on the floor or ceiling) to make infinite falls or infinite bouncing easier on the player. If a portal is on a wall, like a door, this setting can be turned off because it will have nearly no effect.")]
 	public bool momentumSnapping = false;
-
-	/**
-	 * To support FOV changes in desktop (via the slider in the Graphics settings
-	 * menu), you must create an instance of the FOVDetector prefab included with
-	 * UdonPortals and put it in this property. This property must be set before
-	 * the portal GameObject is first activated (before Start() is called).
-	 *
-	 * You only need one FOVDetector instance in the world; multiple portals can
-	 * share a single instance.
-	 *
-	 * For more information on the FOVDetector, read the comment at the top of
-	 * UdonPortalsFOVDetector.cs.
-	 */
-	[Tooltip("Set this to an instance of the FOVDetector prefab so the portals can support FOV changes for Desktop players.")]
-	public UdonPortalsFOVDetector desktopFOVDetector;
 
 
 	// ========================================================================
@@ -323,15 +299,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 	public GameObject portalCameraPrefab;
 
 	/**
-	 * This should be set to the Tracking Scale prefab in the RuntimePrefabs
-	 * folder of the UdonPortals package. The prefab contains an object that
-	 * is used to determine the player's avatar's stereo separation (aka IPD
-	 * aka distance between the eyes) in VR.
-	 */
-	[Tooltip("Leave this as the default TrackingScale prefab asset unless you know what you're doing!")]
-	public GameObject trackingScalePrefab;
-
-	/**
 	 * PortalCamera prefab instance. You can set this manually if you need to
 	 * make some special customization to the portal camera object for only
 	 * one portal.
@@ -351,51 +318,22 @@ public class PortalBehaviour : UdonSharpBehaviour
 	// to the opposite portal's back-face.
 	private Transform virtualHead;
 
-	// These are translated along the X axis to set the stereo separation
-	// of the eye cameras.
-	private Transform offsetL;
-	private Transform offsetR;
-
-	// When there is a Camera that would render directly to the HMD (i.e. the
-	// (player is in VR, targetTexture is null, and targetEye is set to Left,
-	// Right, or Both), Unity tries to be "helpful" and automatically sets
-	// the localPosition and localRotation of the Camera to match the HMD's
-	// reported position relative to the playspace origin.
-	//
-	// That applies to the dummyCameras above, but since we are positioning
-	// the dummyCameras manually, we don't want that. Unfortunately Unity
-	// doesn't let you turn that off (as far as I know) so the easiest way
-	// to set the position is to first "undo" the playspace position by
-	// inverting it.
-	//
-	// A single Transform is evaluated by applying scale, then rotation, then
-	// translation. The easiest way to invert that without doing fun Matrix
-	// stuff is to just to apply each transformation in reverse order using
-	// a hierarchy of GameObjects -- first invert position, then invert
-	// rotation. Scale should always be 1 so it doesn't need to be inverted.
-	private Transform invertRotationL;
-	private Transform invertPositionL;
-	private Transform invertRotationR;
-	private Transform invertPositionR;
-
 	// These cameras capture the scene at the opposite portal.
 	private Camera portalCameraL;
 	private Camera portalCameraR;
 
-	// These cameras are used for obtaining VR rendering information, namely
-	// the projection matrix necessary for the HMD. They are positioned at the
-	// same place as the portal cameras, but aren't enabled and don't render.
-	//
-	// They are also used in VR and Desktop for determining the size of the
-	// screen, which is used to set the size of the RenderTextures.
-	//
-	// The dummyCameras are needed because the portalCameras, which do the
-	// actual rendering, are set to render to a RenderTexture. Unity adjusts
-	// certain properties of the camera when the target is a RenderTexture
-	// instead of the HMD or main display, which is undesirable. Therefore,
-	// properties from the dummy cameras are copied to the rendering cameras.
-	private Camera dummyCameraL;
-	private Camera dummyCameraR;
+	// Cached reference to the camera transforms
+	private Transform portalCameraLTransform;
+	private Transform portalCameraRTransform;
+
+	// The dummy camera is used to obtain the stereo projection matrix used by
+	// the main screen camera. The dummy camera isn't ever used for rendering;
+	// it's just configured to have the same rendering properties as the real
+	// camera, and then GetStereoProjectionMatrix is called on it. Since the
+	// dummy camera is set to ender in stereo (unlike the portalCameras), Unity
+	// will automatically configure the dummy camera's projection matrices for
+	// the current HMD, even though it never renders.
+	private Camera dummyStereoCamera;
 
 	// Cached reference to the renderer and trigger collider on this object
 	private new Renderer renderer;
@@ -427,7 +365,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private bool _noVisuals;
 	private bool _noPhysics;
 
-	private bool refreshCameraSettingsNextFrame;
 	private bool texturesNeedRefresh;
 
 
@@ -527,33 +464,24 @@ public class PortalBehaviour : UdonSharpBehaviour
 			portalCameraRoot.gameObject.SetActive(true);
 
 			virtualHead = portalCameraRoot.Find("VirtualHead");
+			dummyStereoCamera = virtualHead.Find("DummyStereoCamera").GetComponent<Camera>();
+			portalCameraL = virtualHead.Find("PortalCameraL").GetComponent<Camera>();
+			portalCameraR = virtualHead.Find("PortalCameraR").GetComponent<Camera>();
 
-			offsetL = virtualHead.Find("OffsetL");
-			invertRotationL = offsetL.Find("InvertRotationL");
-			invertPositionL = invertRotationL.Find("InvertPositionL");
-			dummyCameraL = invertPositionL.Find("DummyCameraL").GetComponent<Camera>();
-			portalCameraL = offsetL.Find("PortalCameraL").GetComponent<Camera>();
+			portalCameraLTransform = portalCameraL.transform;
+			portalCameraRTransform = portalCameraR.transform;
 
-			offsetR = virtualHead.Find("OffsetR");
-			invertRotationR = offsetR.Find("InvertRotationR");
-			invertPositionR = invertRotationR.Find("InvertPositionR");
-			dummyCameraR = invertPositionR.Find("DummyCameraR").GetComponent<Camera>();
-			portalCameraR = offsetR.Find("PortalCameraR").GetComponent<Camera>();
-
-			offsetR.gameObject.SetActive(inVR);
+			portalCameraR.gameObject.SetActive(inVR);
 
 			/*
 			 * Configure portal cameras.
 			 */
 
-			_ResetTransform(offsetL);
-			_ResetTransform(offsetR);
 			_ResetTransform(virtualHead);
 
 			_ResetCamera(portalCameraL);
 			_ResetCamera(portalCameraR);
-			_ResetCamera(dummyCameraL);
-			_ResetCamera(dummyCameraR);
+			_ResetCamera(dummyStereoCamera);
 
 			_UpdateLayerMask(_layerMask);
 
@@ -563,9 +491,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 			if (inVR) {
 				renderer.material.SetTexture("_ViewTexR", viewTexR);
-
-				dummyCameraL.stereoTargetEye = StereoTargetEyeMask.Left;
-				dummyCameraR.stereoTargetEye = StereoTargetEyeMask.Right;
+				dummyStereoCamera.stereoTargetEye = StereoTargetEyeMask.Both;
 			}
 		}
 
@@ -617,16 +543,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 		#endif
 
 		virtualHead = null;
-		offsetL = null;
-		offsetR = null;
-		invertRotationL = null;
-		invertPositionL = null;
-		invertRotationR = null;
-		invertPositionR = null;
 		portalCameraL = null;
 		portalCameraR = null;
-		dummyCameraL = null;
-		dummyCameraR = null;
+		dummyStereoCamera = null;
 		renderer = null;
 		trigger = null;
 		widthCache = 0;
@@ -697,9 +616,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 			return;
 		}
 
-		VRCPlayerApi.TrackingData trackingHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
-
-		// Note this is not correct, OnWillRenderObject could be called for
+		// Note this is not correct: OnWillRenderObject could be called for
 		// other cameras in the scene, e.g. the PhotoCamera. But there is
 		// no API yet to tell which camera is rendering.
 		//   https://feedback.vrchat.com/sdk-bug-reports/p/vrccamerasettings-property-to-tell-which-camera-is-currently-rendering
@@ -718,49 +635,58 @@ public class PortalBehaviour : UdonSharpBehaviour
 		}
 
 		// Move the virtual head to its appropriate position relative to the opposite portal.
+		// 1. Move the camera root to the position of the current portal.
 		portalCameraRoot.SetPositionAndRotation(transform.position, transform.rotation);
+		// 2. Move the virtual head (child object of the root) to the position of the camera.
+		//    The virtual head is now in the "center" of the player's eyes.
 		virtualHead.SetPositionAndRotation(renderingCamera.Position, renderingCamera.Rotation);
+		// 3. In VR, shift the cameras to the position of each eye
 		if (inVR) {
-			offsetL.SetPositionAndRotation(
+			portalCameraLTransform.SetPositionAndRotation(
 				VRCCameraSettings.GetEyePosition(Camera.StereoscopicEye.Left),
 				VRCCameraSettings.GetEyeRotation(Camera.StereoscopicEye.Left));
-			offsetR.SetPositionAndRotation(
+			portalCameraRTransform.SetPositionAndRotation(
 				VRCCameraSettings.GetEyePosition(Camera.StereoscopicEye.Right),
 				VRCCameraSettings.GetEyeRotation(Camera.StereoscopicEye.Right));
 		}
+		// 4. Rotate the virtual head 180 degrees around the current portal,
+		//    which accounts for the fact that the virtual head looks "out of"
+		//    the partner portal. So we're looking from behind the portal now.
 		virtualHead.RotateAround(transform.position, transform.up, 180);
+		// 5. Finally shift the root, and thus the virtual head, to the position
+		//    and rotation of the partner portal. The virtual head camera is now
+		//    in its final position for rendering the portal view.
 		portalCameraRoot.SetPositionAndRotation(partner.position, partner.rotation);
 
 		// Copy properties from the rendering camera
-		portalCameraL.farClipPlane        = renderingCamera.FarClipPlane;
-		portalCameraL.nearClipPlane       = renderingCamera.NearClipPlane;
-		portalCameraL.fieldOfView         = renderingCamera.FieldOfView;
 		portalCameraL.aspect              = renderingCamera.Aspect;
+		portalCameraL.nearClipPlane       = renderingCamera.NearClipPlane;
+		portalCameraL.farClipPlane        = renderingCamera.FarClipPlane;
+		portalCameraL.fieldOfView         = renderingCamera.FieldOfView;
 		portalCameraL.allowHDR            = renderingCamera.AllowHDR;
 		portalCameraL.backgroundColor     = renderingCamera.BackgroundColor;
 		portalCameraL.clearFlags          = renderingCamera.ClearFlags;
 		portalCameraL.useOcclusionCulling = renderingCamera.UseOcclusionCulling;
 
 		if (inVR) {
-			portalCameraR.farClipPlane        = renderingCamera.FarClipPlane;
-			portalCameraR.nearClipPlane       = renderingCamera.NearClipPlane;
-			portalCameraR.fieldOfView         = renderingCamera.FieldOfView;
 			portalCameraR.aspect              = renderingCamera.Aspect;
+			portalCameraR.nearClipPlane       = renderingCamera.NearClipPlane;
+			portalCameraR.farClipPlane        = renderingCamera.FarClipPlane;
+			portalCameraR.fieldOfView         = renderingCamera.FieldOfView;
 			portalCameraR.allowHDR            = renderingCamera.AllowHDR;
 			portalCameraR.backgroundColor     = renderingCamera.BackgroundColor;
 			portalCameraR.clearFlags          = renderingCamera.ClearFlags;
 			portalCameraR.useOcclusionCulling = renderingCamera.UseOcclusionCulling;
 
-			dummyCameraL.farClipPlane         = renderingCamera.FarClipPlane;
-			dummyCameraL.nearClipPlane        = renderingCamera.NearClipPlane;
-			dummyCameraL.fieldOfView          = renderingCamera.FieldOfView;
-			dummyCameraL.aspect               = renderingCamera.Aspect;
-			dummyCameraR.farClipPlane         = renderingCamera.FarClipPlane;
-			dummyCameraR.nearClipPlane        = renderingCamera.NearClipPlane;
-			dummyCameraR.fieldOfView          = renderingCamera.FieldOfView;
-			dummyCameraR.aspect               = renderingCamera.Aspect;
-			portalCameraL.projectionMatrix = dummyCameraL.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
-			portalCameraR.projectionMatrix = dummyCameraR.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right);
+			// Use the dummy camera to get the per-eye stereo projection matrices.
+			// Copy the properties from the rendering camera to the dummy camera so
+			// that the matrices are computed correctly.
+			dummyStereoCamera.aspect          = renderingCamera.Aspect;
+			dummyStereoCamera.nearClipPlane   = renderingCamera.NearClipPlane;
+			dummyStereoCamera.farClipPlane    = renderingCamera.FarClipPlane;
+			dummyStereoCamera.fieldOfView     = renderingCamera.FieldOfView;
+			portalCameraL.projectionMatrix    = dummyStereoCamera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
+			portalCameraR.projectionMatrix    = dummyStereoCamera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right);
 		}
 		else {
 			portalCameraL.ResetProjectionMatrix();
@@ -780,7 +706,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 			// The GetSide check is detecting whether the portal camera is in
 			// front of the partner portal - effectively in front of its own
 			// near plane. We skip oblique projection if that happens.
-			if (!trackingHeadInTrigger || !ocpDisablePlane.GetSide(offsetL.position)) {
+			if (!trackingHeadInTrigger || !ocpDisablePlane.GetSide(portalCameraLTransform.position)) {
 				Vector4 clipPlane = _CameraSpacePlane(portalCameraL.worldToCameraMatrix, ocpPos, ocpNormal);
 				Matrix4x4 projection = portalCameraL.CalculateObliqueMatrix(clipPlane);
 				portalCameraL.projectionMatrix = projection;
@@ -790,7 +716,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 		if (inVR) {
 			if (_useObliqueProjection) {
-				if (!trackingHeadInTrigger || !ocpDisablePlane.GetSide(offsetR.position)) {
+				if (!trackingHeadInTrigger || !ocpDisablePlane.GetSide(portalCameraRTransform.position)) {
 					Vector4 clipPlane = _CameraSpacePlane(portalCameraR.worldToCameraMatrix, ocpPos, ocpNormal);
 					Matrix4x4 projection = portalCameraR.CalculateObliqueMatrix(clipPlane);
 					portalCameraR.projectionMatrix = projection;
@@ -1246,8 +1172,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 		if (portalCameraL != null) {
 			portalCameraL.cullingMask = _layerMask;
 			portalCameraR.cullingMask = _layerMask;
-			dummyCameraL.cullingMask = _layerMask;
-			dummyCameraR.cullingMask = _layerMask;
 		}
 	}
 
@@ -1259,12 +1183,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 		}
 		_textureResolution = val;
 		texturesNeedRefresh = true;
-	}
-
-	// "It is recommended to do minimal processing [in this event] to avoid affecting performance." 
-	public override void OnVRCCameraSettingsChanged(VRCCameraSettings camera)
-	{
-		refreshCameraSettingsNextFrame = true;
 	}
 
 	// Called by the partner portal (if the partner is a PortalBehaviour)

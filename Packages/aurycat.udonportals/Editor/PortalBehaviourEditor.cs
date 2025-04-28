@@ -9,12 +9,10 @@ public class PortalBehaviourEditor : Editor
 {
 	SerializedProperty operatingModeProp;
 	SerializedProperty partnerProp;
-	SerializedProperty referenceCameraProp;
 	SerializedProperty layerMaskProp;
 	SerializedProperty textureResolutionProp;
 	SerializedProperty callbackScriptProp;
 	SerializedProperty momentumSnappingProp;
-	SerializedProperty desktopFOVDetectorProp;
 
 	SerializedProperty useObliqueProjectionProp;
 	SerializedProperty obliqueClipPlaneOffsetProp;
@@ -26,12 +24,10 @@ public class PortalBehaviourEditor : Editor
 	SerializedProperty viewTexRProp;
 
 	SerializedProperty stereoSeparationModeProp;
-	SerializedProperty trackingScaleProp;
 	SerializedProperty manualStereoSeparationProp;
 	SerializedProperty useHoloportFixProp;
 
 	SerializedProperty portalCameraPrefabProp;
-	SerializedProperty trackingScalePrefabProp;
 	SerializedProperty portalCameraRootProp;
 
 	static bool showAdvanced;
@@ -40,12 +36,10 @@ public class PortalBehaviourEditor : Editor
 	{
 		operatingModeProp = serializedObject.FindProperty("operatingMode");
 		partnerProp = serializedObject.FindProperty("partner");
-		referenceCameraProp = serializedObject.FindProperty("referenceCamera");
 		layerMaskProp = serializedObject.FindProperty("_layerMask");
 		textureResolutionProp = serializedObject.FindProperty("_textureResolution");
 		callbackScriptProp = serializedObject.FindProperty("callbackScript");
 		momentumSnappingProp = serializedObject.FindProperty("momentumSnapping");
-		desktopFOVDetectorProp = serializedObject.FindProperty("desktopFOVDetector");
 
 		viewTexLProp = serializedObject.FindProperty("viewTexL");
 		viewTexRProp = serializedObject.FindProperty("viewTexR");
@@ -58,11 +52,9 @@ public class PortalBehaviourEditor : Editor
 		obliqueClipPlaneDisableDistProp = serializedObject.FindProperty("obliqueClipPlaneDisableDist");
 
 		stereoSeparationModeProp = serializedObject.FindProperty("stereoSeparationMode");
-		trackingScaleProp = serializedObject.FindProperty("trackingScale");
 		manualStereoSeparationProp = serializedObject.FindProperty("manualStereoSeparation");
 
 		portalCameraPrefabProp = serializedObject.FindProperty("portalCameraPrefab");
-		trackingScalePrefabProp = serializedObject.FindProperty("trackingScalePrefab");
 		portalCameraRootProp = serializedObject.FindProperty("portalCameraRoot");
 	}
 
@@ -85,25 +77,6 @@ public class PortalBehaviourEditor : Editor
 				} else {
 					GUILayout.Space(5);
 					EditorGUILayout.HelpBox("Missing reference to prefab asset PortalCamera. The asset cannot be found. Try reimporting the UdonPortals package?", MessageType.Error);
-					GUILayout.Space(15);
-					break;
-				}
-			}
-		}
-
-		prefab = null;
-		foreach (PortalBehaviour p in targets) {
-			if (p.trackingScalePrefab == null) {
-				if (prefab == null) {
-					string path = AssetDatabase.GUIDToAssetPath("1b63f9fde77da584baa2de88791f392a");
-					prefab = (path != null) ? AssetDatabase.LoadMainAssetAtPath(path) as GameObject : null;
-				}
-				if (prefab != null) {
-					p.trackingScalePrefab = prefab;
-					EditorUtility.SetDirty(p);
-				} else {
-					GUILayout.Space(5);
-					EditorGUILayout.HelpBox("Missing reference to prefab asset TrackingScale. The asset cannot be found. Try reimporting the UdonPortals package?", MessageType.Error);
 					GUILayout.Space(15);
 					break;
 				}
@@ -165,30 +138,8 @@ public class PortalBehaviourEditor : Editor
 			GUILayout.BeginVertical("box");
 			GUILayout.Label("Visuals", EditorStyles.boldLabel);
 			GUILayout.Space(10);
-			EditorGUILayout.PropertyField(referenceCameraProp);
-			foreach (PortalBehaviour p in targets) {
-				if (p.referenceCamera == null) {
-					EditorGUILayout.HelpBox("Set this to your world's reference camera (Main Camera).", MessageType.Warning);
-					if (GUILayout.Button("Autodetect Main Camera")) {
-						SetMainCamera();
-					}
-					GUILayout.Space(10);
-					break;
-				}
-			}
 			EditorGUILayout.PropertyField(layerMaskProp);
 			EditorGUILayout.PropertyField(textureResolutionProp);
-			GUILayout.Space(10);
-			EditorGUILayout.PropertyField(desktopFOVDetectorProp);
-			foreach (PortalBehaviour p in targets) {
-				if (p.desktopFOVDetector == null) {
-					EditorGUILayout.HelpBox("For the portals to work for Desktop players, you must create an instance of the FOVDetector prefab and set this property to it. Click the button below to find an existing FOVDetector instance, or create one if none exists, and set this property to it.", MessageType.Warning);
-					if (GUILayout.Button("Setup FOVDetector")) {
-						SetupFOVDetector();
-					}
-					break;
-				}
-			}
 			GUILayout.Space(5);
 			GUILayout.EndVertical();
 		}
@@ -270,7 +221,6 @@ public class PortalBehaviourEditor : Editor
 					MessageType.Info);
 				GUILayout.Space(5);
 				EditorGUILayout.PropertyField(stereoSeparationModeProp);
-				EditorGUILayout.PropertyField(trackingScaleProp);
 				if (serializedObject.isEditingMultipleObjects || stereoSeparationModeProp.intValue == 2) {
 					EditorGUILayout.PropertyField(manualStereoSeparationProp);
 				}
@@ -279,7 +229,7 @@ public class PortalBehaviourEditor : Editor
 						EditorGUILayout.HelpBox("Stereo Separation Mode must be between 0 and 2.", MessageType.Error);
 						GUILayout.Space(5);
 					}
-					else if (!EditorApplication.isPlaying && (stereoSeparationModeProp.intValue != 0 || trackingScaleProp.objectReferenceValue != null)) {
+					else if (!EditorApplication.isPlaying && stereoSeparationModeProp.intValue != 0) {
 						EditorGUILayout.HelpBox("These settings are not at their default value. You should probably not change these. Make sure to read the documentation for 'stereoSeparationMode' in PortalBehavior.cs if you do.", MessageType.Warning);
 						GUILayout.Space(5);
 					}
@@ -295,7 +245,6 @@ public class PortalBehaviourEditor : Editor
 					MessageType.Info);
 				GUILayout.Space(5);
 				EditorGUILayout.PropertyField(portalCameraPrefabProp);
-				EditorGUILayout.PropertyField(trackingScalePrefabProp);
 				EditorGUILayout.PropertyField(portalCameraRootProp);
 				if (!serializedObject.isEditingMultipleObjects) {
 					if (!EditorApplication.isPlaying && portalCameraRootProp.objectReferenceValue != null) {
@@ -343,72 +292,5 @@ public class PortalBehaviourEditor : Editor
 		path = AssetDatabase.GenerateUniqueAssetPath(path);
 		AssetDatabase.CreateAsset(tex, path);
 		return tex;
-	}
-
-	void SetupFOVDetector()
-	{
-		UdonPortalsFOVDetector[] ds = Resources.FindObjectsOfTypeAll<UdonPortalsFOVDetector>();
-		UdonPortalsFOVDetector detector = null;
-		foreach (var d in ds) {
-			// From  https://docs.unity3d.com/ScriptReference/Resources.FindObjectsOfTypeAll.html
-			bool inScene = !EditorUtility.IsPersistent(d.transform.root.gameObject) && !(d.hideFlags == HideFlags.NotEditable || d.hideFlags == HideFlags.HideAndDontSave);
-			if (inScene) {
-				detector = d;
-				break;
-			}
-		}
-
-		// In Unity 2019.4 there is no version of FindObjectOfType that can
-		// detect stuff on inactive GameObjects. Once VRC updates their SDK
-		// to Unity 2022, the above code can be replaced with this:
-		//UdonPortalsFOVDetector detector = FindObjectOfType<UdonPortalsFOVDetector>(true);
-
-
-
-		if (detector == null) {
-
-			string path = AssetDatabase.GUIDToAssetPath("3c862a5ce1cdd5341b4cdabf22e32851");
-			GameObject prefab = (path != null) ? AssetDatabase.LoadMainAssetAtPath(path) as GameObject : null;
-			GameObject instance = (prefab != null) ? PrefabUtility.InstantiatePrefab(prefab) as GameObject : null;
-			if (instance != null) {
-				Undo.IncrementCurrentGroup();
-				Undo.RegisterCreatedObjectUndo(instance, "Create FOVDetector");
-				Undo.RegisterCompleteObjectUndo(instance, "Create FOVDetector");
-				Undo.SetCurrentGroupName("Create FOVDetector");
-			}
-			detector = (instance != null) ? instance.GetComponent<UdonPortalsFOVDetector>() : null;
-			SceneVisibilityManager.instance.Hide(instance, false);
-		}
-
-		if (detector != null) {
-			Undo.IncrementCurrentGroup();
-			Undo.RegisterCompleteObjectUndo(targets, "Set Desktop FOV Detector property");
-			foreach(PortalBehaviour p in targets) {
-				if(p.desktopFOVDetector == null) {
-					p.desktopFOVDetector = detector;
-					PrefabUtility.RecordPrefabInstancePropertyModifications(p);
-				}
-			}
-			Undo.SetCurrentGroupName("Set Desktop FOV Detector property");
-		}
-		else {
-			Debug.LogError("Unable to find an existing instance of UdonPortalsFOVDetector or find the FOVDetector prefab asset. Try reimporting the UdonPortals package?");
-		}
-	}
-
-	void SetMainCamera()
-	{
-		GameObject camObj = GameObject.FindWithTag("MainCamera");
-		Camera cam = camObj == null ? null : camObj.GetComponent<Camera>();
-		if (cam != null) {
-			Undo.RegisterCompleteObjectUndo(targets, "Set reference camera on portals");
-			foreach (PortalBehaviour p in targets) {
-				p.referenceCamera = cam;
-				PrefabUtility.RecordPrefabInstancePropertyModifications(p);
-			}
-		}
-		else {
-			Debug.LogError("No active GameObject with 'MainCamera' tag found in scene.");
-		}
 	}
 }
