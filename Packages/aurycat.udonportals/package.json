@@ -14,6 +14,6 @@
     "Assets\\UdonPortals" : "e1bfa6ec702f4c6448ff326b3de1b286"
   },
   "vpmDependencies": {
-    "com.vrchat.worlds": "^3.2.2"
+    "com.vrchat.worlds": "^3.8.1"
   }
 }
