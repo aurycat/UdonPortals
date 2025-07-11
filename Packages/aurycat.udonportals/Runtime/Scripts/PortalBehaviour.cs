@@ -305,34 +305,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 
 	// ========================================================================
-	// OBSOLETE PUBLIC PROPERTIES
-	// ========================================================================
-
-	[Obsolete("This field is ignored as of v1.6")]
-	[HideInInspector]
-	public Camera referenceCamera;
-
-	[Obsolete("This field is ignored as of v1.6")]
-	[HideInInspector]
-	public System.Object desktopFOVDetector;
-
-	[Obsolete("This field is ignored as of v1.6")]
-	[HideInInspector]
-	public int stereoSeparationMode;
-
-	[Obsolete("This property always returns 0 as of v1.6")]
-	public float stereoSeparation => 0;
-
-	[Obsolete("This field is ignored as of v1.6")]
-	[HideInInspector]
-	public Transform trackingScale;
-
-	[Obsolete("This field is ignored as of v1.6")]
-	[HideInInspector]
-	public GameObject trackingScalePrefab;
-
-
-	// ========================================================================
 	// PRIVATE PROPERTIES
 	// ========================================================================
 
