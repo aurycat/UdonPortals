@@ -24,6 +24,9 @@
 //                   physics only or visuals only portals. Add momentum snapping option.
 //                   Support user-changed FOVs in Desktop play.
 //  1.5 (2024-11-17) Support Holoport locomotion.
+//  2.0 (2025-07-11) Upgrade to using VRCCameraSettings API for getting camera info.
+//                   Some fields and properties that are no longer necessary have been
+//                   removed from PortalBehavior, and FOVDetector has been removed.
 
 using UdonSharp;
 using UnityEngine;
