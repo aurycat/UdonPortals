@@ -278,16 +278,13 @@ public class PortalBehaviour : UdonSharpBehaviour
 	[Tooltip("Read this property's documentation in PortalBehaviour.cs before changing!")]
 	public float obliqueClipPlaneDisableDist = 0.05f;
 
-	// TODO: Remove(?)
-	public int stereoSeparationMode = 0;
-	public Transform trackingScale = null;
-	public float manualStereoSeparation = 0f; // in meters
-
-	// TODO: Remove(?)
-	private float _stereoSeparation = 0f; // in meters
-	public float stereoSeparation {
-		get => _stereoSeparation;
-	}
+	/**
+	 * If set to a value > 0, this overrides the stereo separation of the VR
+	 * portal camera with a custom value. This is essentially only useful for
+	 * demonstrating the effect of stereo separation on VR rendering.
+	 */
+	[HideInInspector]
+	public float manualStereoSeparation = 0f;
 
 	/**
 	 * This should be set to the Portal Camera prefab in the RuntimePrefabs
@@ -642,11 +639,22 @@ public class PortalBehaviour : UdonSharpBehaviour
 		virtualHead.SetPositionAndRotation(renderingCamera.Position, renderingCamera.Rotation);
 		// 3. In VR, shift the cameras to the position of each eye
 		if (inVR) {
+			Vector3 leftEyePos = VRCCameraSettings.GetEyePosition(Camera.StereoscopicEye.Left);
+			Vector3 rightEyePos = VRCCameraSettings.GetEyePosition(Camera.StereoscopicEye.Right);
+
+			if (manualStereoSeparation > 0.0f) {
+				Vector3 centerPos = leftEyePos*0.5f + rightEyePos*0.5f;
+				Vector3 dir = (leftEyePos - centerPos).normalized;
+				float ssHalf = manualStereoSeparation * 0.5f;
+				leftEyePos = centerPos + dir * ssHalf;
+				rightEyePos = centerPos - dir * ssHalf;
+			}
+
 			portalCameraLTransform.SetPositionAndRotation(
-				VRCCameraSettings.GetEyePosition(Camera.StereoscopicEye.Left),
+				leftEyePos,
 				VRCCameraSettings.GetEyeRotation(Camera.StereoscopicEye.Left));
 			portalCameraRTransform.SetPositionAndRotation(
-				VRCCameraSettings.GetEyePosition(Camera.StereoscopicEye.Right),
+				rightEyePos,
 				VRCCameraSettings.GetEyeRotation(Camera.StereoscopicEye.Right));
 		}
 		// 4. Rotate the virtual head 180 degrees around the current portal,
