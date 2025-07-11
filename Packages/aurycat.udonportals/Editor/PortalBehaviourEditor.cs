@@ -23,8 +23,6 @@ public class PortalBehaviourEditor : Editor
 	SerializedProperty viewTexLProp;
 	SerializedProperty viewTexRProp;
 
-	SerializedProperty stereoSeparationModeProp;
-	SerializedProperty manualStereoSeparationProp;
 	SerializedProperty useHoloportFixProp;
 
 	SerializedProperty portalCameraPrefabProp;
@@ -50,9 +48,6 @@ public class PortalBehaviourEditor : Editor
 		useObliqueProjectionProp = serializedObject.FindProperty("_useObliqueProjection");
 		obliqueClipPlaneOffsetProp = serializedObject.FindProperty("obliqueClipPlaneOffset");
 		obliqueClipPlaneDisableDistProp = serializedObject.FindProperty("obliqueClipPlaneDisableDist");
-
-		stereoSeparationModeProp = serializedObject.FindProperty("stereoSeparationMode");
-		manualStereoSeparationProp = serializedObject.FindProperty("manualStereoSeparation");
 
 		portalCameraPrefabProp = serializedObject.FindProperty("portalCameraPrefab");
 		portalCameraRootProp = serializedObject.FindProperty("portalCameraRoot");
@@ -205,34 +200,6 @@ public class PortalBehaviourEditor : Editor
 				if (serializedObject.isEditingMultipleObjects || useObliqueProjectionProp.boolValue) {
 					EditorGUILayout.PropertyField(obliqueClipPlaneOffsetProp);
 					EditorGUILayout.PropertyField(obliqueClipPlaneDisableDistProp);
-				}
-				GUILayout.Space(5);
-				GUILayout.EndVertical();
-
-				GUILayout.Space(15);
-				GUILayout.BeginVertical("box");
-				GUILayout.Space(5);
-				EditorGUILayout.HelpBox(
-					"The following settings control stereo separation behaviour (aka IPD) in VR. " +
-					"If the portal is looking weird in VR (e.g. warping when you rotate " +
-					"your head), something may be wrong with stereo separation. If that " +
-					"happens, read the comment above the 'stereoSeparationMode' property " +
-					"in PortalBehaviour.cs for more info. Otherwise, don't touch these!",
-					MessageType.Info);
-				GUILayout.Space(5);
-				EditorGUILayout.PropertyField(stereoSeparationModeProp);
-				if (serializedObject.isEditingMultipleObjects || stereoSeparationModeProp.intValue == 2) {
-					EditorGUILayout.PropertyField(manualStereoSeparationProp);
-				}
-				if (!serializedObject.isEditingMultipleObjects) {
-					if (stereoSeparationModeProp.intValue < 0 || stereoSeparationModeProp.intValue > 2) {
-						EditorGUILayout.HelpBox("Stereo Separation Mode must be between 0 and 2.", MessageType.Error);
-						GUILayout.Space(5);
-					}
-					else if (!EditorApplication.isPlaying && stereoSeparationModeProp.intValue != 0) {
-						EditorGUILayout.HelpBox("These settings are not at their default value. You should probably not change these. Make sure to read the documentation for 'stereoSeparationMode' in PortalBehavior.cs if you do.", MessageType.Warning);
-						GUILayout.Space(5);
-					}
 				}
 				GUILayout.Space(5);
 				GUILayout.EndVertical();
