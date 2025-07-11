@@ -28,12 +28,13 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8409882337321345903}
+  serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 2, y: 2, z: 1}
+  m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &7218419441993975920
 MonoBehaviour:
@@ -60,26 +61,21 @@ MonoBehaviour:
   operatingMode: 0
   partner: {fileID: 0}
   partnerPortalBehaviour: {fileID: 0}
-  referenceCamera: {fileID: 0}
   _layerMask:
     serializedVersion: 2
     m_Bits: 4291193607
   _textureResolution: 1
   callbackScript: {fileID: 0}
   momentumSnapping: 0
-  desktopFOVDetector: {fileID: 0}
   viewTexL: {fileID: 0}
   viewTexR: {fileID: 0}
   teleportPlaneOffset: 0
+  useHoloportFix: 1
   _useObliqueProjection: 1
   obliqueClipPlaneOffset: 0
   obliqueClipPlaneDisableDist: 0.05
-  stereoSeparationMode: 0
-  trackingScale: {fileID: 0}
   manualStereoSeparation: 0
   portalCameraPrefab: {fileID: 5113665920842851259, guid: 2a3f08df2e7a397438e5f2f7fd0505a2,
-    type: 3}
-  trackingScalePrefab: {fileID: 562814308063240339, guid: 1b63f9fde77da584baa2de88791f392a,
     type: 3}
   portalCameraRoot: {fileID: 0}
 --- !u!33 &4243054887803771837
@@ -101,10 +97,12 @@ MeshRenderer:
   m_CastShadows: 0
   m_ReceiveShadows: 0
   m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
   m_MotionVectors: 1
   m_LightProbeUsage: 1
   m_ReflectionProbeUsage: 1
   m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -129,6 +127,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_AdditionalVertexStreams: {fileID: 0}
 --- !u!65 &2311979489750113290
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -137,9 +136,17 @@ BoxCollider:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8409882337321345903}
   m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
   m_IsTrigger: 1
+  m_ProvidesContacts: 0
   m_Enabled: 1
-  serializedVersion: 2
+  serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!114 &6422241506717273789

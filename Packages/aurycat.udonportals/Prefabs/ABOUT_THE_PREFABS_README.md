@@ -39,13 +39,6 @@ looked through. For example, this should be used for a window, but not a door.
 Same as "VisualsOnlyPortal", but uses the PortalNoDepth material.
 
 
-## FOVDetector
-
-You'll need to add one instance of this to your world. Pressing the
-"Setup FOV Detector" button on the portal behaviour will add one
-automatically, so you can usually ignore this prefab.
-
-
 ## ExampleFramedPortal
 
 Hopefully self explanatory :)

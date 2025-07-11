@@ -251,7 +251,7 @@ PrefabInstance:
         type: 3}
       propertyPath: serializedProgramAsset
       value: 
-      objectReference: {fileID: 11400000, guid: 4d39d3a2e35ba3645acbd1586b9e12b3,
+      objectReference: {fileID: 11400000, guid: f5a10bbbf3649334b92552b94402caca,
         type: 2}
     - target: {fileID: 7479263585136956993, guid: b5ff06aa6547bd54dbdd0cd245a55641,
         type: 3}
@@ -275,18 +275,8 @@ PrefabInstance:
       objectReference: {fileID: 8400000, guid: c1b9f92f1a7b39747bb57a816540da56, type: 2}
     - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
         type: 3}
-      propertyPath: referenceCamera
-      value: 
-      objectReference: {fileID: 504657928}
-    - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
-        type: 3}
       propertyPath: momentumSnapping
       value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
-        type: 3}
-      propertyPath: desktopFOVDetector
-      value: 
       objectReference: {fileID: 0}
     - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
         type: 3}
@@ -638,7 +628,7 @@ MonoBehaviour:
   AllowCollisionOwnershipTransfer: 1
   Reliable: 0
   _syncMethod: 1
-  serializedProgramAsset: {fileID: 11400000, guid: 051fa447c35753348823d9f111a32e2e,
+  serializedProgramAsset: {fileID: 11400000, guid: 249f596135adbb443881a65b408e5cce,
     type: 2}
   programSource: {fileID: 11400000, guid: 98bb2a9cac3c3a8419b856ded5d99bcb, type: 2}
   serializedPublicVariablesBytesString: Ai8AAAAAATIAAABWAFIAQwAuAFUAZABvAG4ALgBDAG8AbQBtAG8AbgAuAFUAZABvAG4AVgBhAHIAaQBhAGIAbABlAFQAYQBiAGwAZQAsACAAVgBSAEMALgBVAGQAbwBuAC4AQwBvAG0AbQBvAG4AAAAAAAYBAAAAAAAAACcBBAAAAHQAeQBwAGUAAWgAAABTAHkAcwB0AGUAbQAuAEMAbwBsAGwAZQBjAHQAaQBvAG4AcwAuAEcAZQBuAGUAcgBpAGMALgBMAGkAcwB0AGAAMQBbAFsAVgBSAEMALgBVAGQAbwBuAC4AQwBvAG0AbQBvAG4ALgBJAG4AdABlAHIAZgBhAGMAZQBzAC4ASQBVAGQAbwBuAFYAYQByAGkAYQBiAGwAZQAsACAAVgBSAEMALgBVAGQAbwBuAC4AQwBvAG0AbQBvAG4AXQBdACwAIABtAHMAYwBvAHIAbABpAGIAAQEJAAAAVgBhAHIAaQBhAGIAbABlAHMALwEAAAABaAAAAFMAeQBzAHQAZQBtAC4AQwBvAGwAbABlAGMAdABpAG8AbgBzAC4ARwBlAG4AZQByAGkAYwAuAEwAaQBzAHQAYAAxAFsAWwBWAFIAQwAuAFUAZABvAG4ALgBDAG8AbQBtAG8AbgAuAEkAbgB0AGUAcgBmAGEAYwBlAHMALgBJAFUAZABvAG4AVgBhAHIAaQBhAGIAbABlACwAIABWAFIAQwAuAFUAZABvAG4ALgBDAG8AbQBtAG8AbgBdAF0ALAAgAG0AcwBjAG8AcgBsAGkAYgABAAAABgAAAAAAAAAABwUHBQ==
@@ -733,7 +723,7 @@ PrefabInstance:
         type: 3}
       propertyPath: serializedProgramAsset
       value: 
-      objectReference: {fileID: 11400000, guid: e9bb7bf3a084eab4cac472f6c7f5ff31,
+      objectReference: {fileID: 11400000, guid: ca4aa03cb445fb740ae8c761217ba40e,
         type: 2}
     - target: {fileID: 1415578911040940289, guid: 8894fa7e4588a5c4fab98453e558847d,
         type: 3}
@@ -1149,7 +1139,7 @@ PrefabInstance:
         type: 3}
       propertyPath: serializedProgramAsset
       value: 
-      objectReference: {fileID: 11400000, guid: 8c50a2342948ba348b6f69434022f4d8,
+      objectReference: {fileID: 11400000, guid: 9aba74d25ac8ba7489bfd4246e259dd7,
         type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -1575,7 +1565,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 2
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!223 &1522614816
 Canvas:
   m_ObjectHideFlags: 0
@@ -1733,7 +1723,7 @@ PrefabInstance:
         type: 3}
       propertyPath: serializedProgramAsset
       value: 
-      objectReference: {fileID: 11400000, guid: 4d39d3a2e35ba3645acbd1586b9e12b3,
+      objectReference: {fileID: 11400000, guid: f5a10bbbf3649334b92552b94402caca,
         type: 2}
     - target: {fileID: 7479263585136956993, guid: b5ff06aa6547bd54dbdd0cd245a55641,
         type: 3}
@@ -1757,18 +1747,8 @@ PrefabInstance:
       objectReference: {fileID: 8400000, guid: a425d5cfb63a1a74cb693957f9e9f17b, type: 2}
     - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
         type: 3}
-      propertyPath: referenceCamera
-      value: 
-      objectReference: {fileID: 504657928}
-    - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
-        type: 3}
       propertyPath: momentumSnapping
       value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
-        type: 3}
-      propertyPath: desktopFOVDetector
-      value: 
       objectReference: {fileID: 0}
     - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
         type: 3}
