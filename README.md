@@ -14,15 +14,12 @@ https://github.com/user-attachments/assets/03e459e4-3762-459f-a64d-7842d7d798e9
 
 ## Basic Usage
 
-1. Ensure UdonSharp is installed. (If your VCC is up to date, it is installed automatically for all VRC Worlds projects.)
-2. Install UdonPortals into your VRC World project through VCC or directly through a .unitypackage.
-3. Drag two "ExampleFramedPortal" prefab instances from the Packages/UdonPortals/Prefabs folder into your scene.
-4. In each framed portal instance, there is a child object named "Portal". It is a good idea to rename each of these to something different, e.g. "Portal A" and "Portal B".
-5. Ctrl-select both of the portal child objects. With both selected, in the Inspector...
-6. ...click "Generate Render Textures" in the PortalBehaviour component.
-7. ...click "Pair These Two Selected Portals"
-8. ...click "Autodetect Main Camera"
-9. ...click "Setup FOVDetector".
+1. Install UdonPortals into your VRC World project through VCC or directly through a .unitypackage.
+2. Drag two "ExampleFramedPortal" prefab instances from the Packages/UdonPortals/Prefabs folder into your scene.
+3. In each framed portal instance, there is a child object named "Portal". It is a good idea to rename each of these to something different, e.g. "Portal A" and "Portal B".
+4. Ctrl-select both of the portal child objects. With both selected, in the Inspector...
+5. ...click "Generate Render Textures" in the PortalBehaviour component.
+6. ...click "Pair These Two Selected Portals".
 
 That's it! The portals will look black in the editor, but will work in Play Mode and in-game. I suggest looking at the provided example scene for more details.
 
