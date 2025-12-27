@@ -628,6 +628,19 @@ public class PortalBehaviour : UdonSharpBehaviour
 		texturesNeedRefresh = true;
 	}
 
+	/**
+	 * This should be called if the partner property is changed while
+	 * the portal is active.
+	 */
+	public void RefreshPartner()
+	{
+		if (partner == null) {
+			Debug.LogError($"Deactivating portal '{name}' because its partner transform was changed to null.");
+			return;
+		}
+		partnerPortalBehaviour = partner.GetComponent<PortalBehaviour>();
+	}
+
 	// Local vars within OnWillRenderObject, just placed here to avoid
 	// initializing them every frame when not doing oblique projection
 	private Vector3 ocpNormal = Vector3.zero;
