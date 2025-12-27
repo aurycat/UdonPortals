@@ -13,6 +13,8 @@ public class PortalBehaviourEditor : Editor
 	SerializedProperty textureResolutionProp;
 	SerializedProperty callbackScriptProp;
 	SerializedProperty momentumSnappingProp;
+	SerializedProperty activatePartnerOnTeleportProp;
+	SerializedProperty deactivateSelfOnTeleportProp;
 
 	SerializedProperty useObliqueProjectionProp;
 	SerializedProperty obliqueClipPlaneOffsetProp;
@@ -38,6 +40,8 @@ public class PortalBehaviourEditor : Editor
 		textureResolutionProp = serializedObject.FindProperty("_textureResolution");
 		callbackScriptProp = serializedObject.FindProperty("callbackScript");
 		momentumSnappingProp = serializedObject.FindProperty("momentumSnapping");
+		activatePartnerOnTeleportProp = serializedObject.FindProperty("activatePartnerOnTeleport");
+		deactivateSelfOnTeleportProp = serializedObject.FindProperty("deactivateSelfOnTeleport");
 
 		viewTexLProp = serializedObject.FindProperty("viewTexL");
 		viewTexRProp = serializedObject.FindProperty("viewTexR");
@@ -142,10 +146,12 @@ public class PortalBehaviourEditor : Editor
 		if (serializedObject.isEditingMultipleObjects || operatingModeProp.enumValueIndex != (int)PortalBehaviourMode.VisualsOnly) {
 			GUILayout.Space(15);
 			GUILayout.BeginVertical("box");
-			GUILayout.Label("Physics", EditorStyles.boldLabel);
+			GUILayout.Label("Physics / Teleporting", EditorStyles.boldLabel);
 			GUILayout.Space(10);
 			EditorGUILayout.PropertyField(callbackScriptProp);
 			EditorGUILayout.PropertyField(momentumSnappingProp);
+			EditorGUILayout.PropertyField(activatePartnerOnTeleportProp);
+			EditorGUILayout.PropertyField(deactivateSelfOnTeleportProp);
 			GUILayout.Space(5);
 			GUILayout.EndVertical();
 		}

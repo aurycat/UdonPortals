@@ -160,6 +160,11 @@ public class PortalBehaviour : UdonSharpBehaviour
 	[Tooltip("When enabled, the portal attempts to align the player's momentum to the portal orientation when traveling through it. Additionally it has some extra snapping behavior for flat portals (i.e. on the floor or ceiling) to make infinite falls or infinite bouncing easier on the player. If a portal is on a wall, like a door, this setting can be turned off because it will have nearly no effect.")]
 	public bool momentumSnapping = false;
 
+	[Tooltip("When enabled, the partner portal/GameObject is automatically activated when the player is teleported to it. For best performance, portal GameObjects should be inactive when the player can't see them (e.g. via trigger colliders). However, teleporting to an inactive portal can cause flicker for 1 frame before the trigger detects the player. Immediately activating the portal on teleport via this setting can help.")]
+	public bool activatePartnerOnTeleport = true;
+
+	[Tooltip("When enabled, this portal will be deactivated after the player passes through it. Having a portal deactive whenever possible helps with performance, so if the player can no longer see this portal after passing through, consider using this setting to disable it automatically.")]
+	public bool deactivateSelfOnTeleport = false;
 
 	// ========================================================================
 	// ADVANCED PUBLIC PROPERTIES
@@ -305,6 +310,23 @@ public class PortalBehaviour : UdonSharpBehaviour
 	 */
 	[Tooltip("If left unset, gets automatically set to a generated instance of portalCameraPrefab.")]
 	public Transform portalCameraRoot;
+
+
+	// ========================================================================
+	// PUBLIC RUNTIME PROPERTIES
+	// ========================================================================
+
+	/**
+	 * These are set immediately before sending the _PortalWillTeleportPlayer
+	 * or _PortalWillTeleportObject events to the callback script. The callback
+	 * script can read these variables to know where the object will be
+	 * teleported to. In VR, the position and rotation of players are of the
+	 * AvatarRoot tracking data. In Desktop, they are of the Origin tracking data.
+	 * The callback can also modify these variables to affect the teleport.
+	 */
+	[HideInInspector] public Vector3 destPosition;
+	[HideInInspector] public Quaternion destRotation;
+	[HideInInspector] public Vector3 destVelocity;
 
 
 	// ========================================================================
@@ -839,7 +861,12 @@ public class PortalBehaviour : UdonSharpBehaviour
 				// causes some "ghosting" -- it appears like you can see yourself
 				// through the portal one frame in advance, or something like that.
 				// Delaying until Update makes it go away.
-				SendCustomEventDelayedFrames("_TeleportPlayer", 0, VRC.Udon.Common.Enums.EventTiming.Update);
+				if (useNewTeleportMethod) {
+					SendCustomEventDelayedFrames(nameof(_TeleportPlayer), 0, VRC.Udon.Common.Enums.EventTiming.Update);
+				}
+				else {
+					SendCustomEventDelayedFrames(nameof(_TeleportPlayerOld), 0, VRC.Udon.Common.Enums.EventTiming.Update);
+				}
 			}
 			prevInFront = inFront;
 		}
@@ -848,21 +875,18 @@ public class PortalBehaviour : UdonSharpBehaviour
 		}
 	}
 
+	public bool useNewTeleportMethod = false;
 	private Quaternion local180 = Quaternion.AngleAxis(180, Vector3.up);
 
 	// Not public API. Only public for calling from SendCustomEventDelayedFrames.
 	public void _TeleportPlayer()
 	{
-		if (callbackScript != null) {
-			callbackScript.SetProgramVariable("sourcePortal", this);
-			callbackScript.SendCustomEvent("_PortalWillTeleportPlayer");
-		}
-
-		if (partnerPortalBehaviour != null) {
-			partnerPortalBehaviour.OnWillReceivePlayer();
-		}
-
+		Debug.Log("NEW TELEPORT");
 		VRCPlayerApi.TrackingData trackingHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
+		VRCPlayerApi.TrackingData trackingRoot =
+			inVR
+			? localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.AvatarRoot)
+			: localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Origin);
 
 		// When a player is currently moving with Holoport locomotion, their
 		// avatar will be distant from their viewpoint. Teleport based on
@@ -875,21 +899,10 @@ public class PortalBehaviour : UdonSharpBehaviour
 		// the teleport won't be visually seamless. Unlike normal locomotion,
 		// Holoport's whole purpose is to snap to a new viewpoint, so it's okay
 		// that the teleport isn't visually seamless.
-		Vector3 playerOriginPos;
-		Quaternion playerOriginRot;
-		Vector3 playerHeadPos;
-		if (isHoloport) {
-			VRCPlayerApi.TrackingData avatarRoot = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.AvatarRoot);
-			playerOriginPos = avatarRoot.position;
-			playerOriginRot = avatarRoot.rotation;
-			playerHeadPos = localPlayer.GetBonePosition(HumanBodyBones.Head);
-		}
-		else {
-			VRCPlayerApi.TrackingData trackingOrigin = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Origin);
-			playerOriginPos = trackingOrigin.position;
-			playerOriginRot = trackingOrigin.rotation;
-			playerHeadPos = trackingHead.position;
-		}
+		Vector3 playerHeadPos =
+			isHoloport
+			? localPlayer.GetBonePosition(HumanBodyBones.Head)
+			: trackingHead.position;
 
 		// Don't use transform/partner.TransformPoint because it accounts for
 		// scale, which we don't want -- otherwise a portal pair that have
@@ -913,15 +926,15 @@ public class PortalBehaviour : UdonSharpBehaviour
 		float inputY = transform.rotation.eulerAngles.y;
 		float outputY = partnerInvRot.eulerAngles.y;
 		float diffY = outputY - inputY;
-		float playerY = playerOriginRot.eulerAngles.y;
+		float playerY = trackingRoot.rotation.eulerAngles.y;
 		float newY = playerY + diffY;
-		Quaternion newRot = Quaternion.Euler(0, newY, 0);
+		destRotation = Quaternion.Euler(0, newY, 0);
 
 		// From the newHeadPos and rotation delta, calculate the new origin
 		// position which is what we need for teleporting.
-		Vector3 headToOrigin = playerOriginPos - playerHeadPos;
-		headToOrigin = Quaternion.AngleAxis(diffY, Vector3.up) * headToOrigin;
-		Vector3 newPos = newHeadPos + headToOrigin;
+		Vector3 headToRoot = trackingRoot.position - playerHeadPos;
+		headToRoot = Quaternion.AngleAxis(diffY, Vector3.up) * headToRoot;
+		destPosition = newHeadPos + headToRoot;
 
 		// Find new velocity
 
@@ -1009,34 +1022,227 @@ public class PortalBehaviour : UdonSharpBehaviour
 				localToPartnerRot = toVertical * localToPartnerRot;
 			}
 		}
-		Vector3 newVel = localToPartnerRot * localVel;
+		destVelocity = localToPartnerRot * localVel;
+
+		// Inform others
+		if (callbackScript != null) {
+			callbackScript.SetProgramVariable("sourcePortal", this);
+			callbackScript.SendCustomEvent("_PortalWillTeleportPlayer");
+		}
+		if (activatePartnerOnTeleport) {
+			partner.gameObject.SetActive(true);
+		}
+		if (partnerPortalBehaviour != null) {
+			partnerPortalBehaviour.OnWillReceivePlayer(this);
+		}
+
+		// Do teleport
+		localPlayer.TeleportTo(
+			destPosition,
+			destRotation,
+			VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignPlayerWithSpawnPoint,
+			/*lerpOnRemote=*/false);
+
+		localPlayer.SetVelocity(destVelocity);
+
+		if (deactivateSelfOnTeleport) {
+			gameObject.SetActive(false);
+		}
+	}
+
+	public void _TeleportPlayerOld()
+	{
+		VRCPlayerApi.TrackingData trackingHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
+
+		// When a player is currently moving with Holoport locomotion, their
+		// avatar will be distant from their viewpoint. Teleport based on
+		// their avatar location so that their avatar ends up in the correct
+		// spot after teleporting. Thankfully, when calling TeleportTo, VRChat
+		// automatically resets the viewpoint to the teleport destination.
+		//
+		// Note we can't use avatar & head bone position with normal locomotion
+		// because it won't be perfectly aligned with the VR viewpoint, meaning
+		// the teleport won't be visually seamless. Unlike normal locomotion,
+		// Holoport's whole purpose is to snap to a new viewpoint, so it's okay
+		// that the teleport isn't visually seamless.
+		Vector3 playerOriginPos;
+		Quaternion playerOriginRot;
+		Vector3 playerHeadPos;
+		if (isHoloport) {
+			VRCPlayerApi.TrackingData avatarRoot = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.AvatarRoot);
+			playerOriginPos = avatarRoot.position;
+			playerOriginRot = avatarRoot.rotation;
+			playerHeadPos = localPlayer.GetBonePosition(HumanBodyBones.Head);
+		}
+		else {
+			VRCPlayerApi.TrackingData trackingOrigin = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Origin);
+			playerOriginPos = trackingOrigin.position;
+			playerOriginRot = trackingOrigin.rotation;
+			playerHeadPos = trackingHead.position;
+		}
+
+		// Don't use transform/partner.TransformPoint because it accounts for
+		// scale, which we don't want -- otherwise a portal pair that have
+		// different world scales (even if the surfaces are identical size
+		// due to different meshes) won't work correctly together.
+		Matrix4x4 selfWorldToLocalMat = Matrix4x4.TRS(transform.position, transform.rotation, Vector3.one).inverse;
+		Matrix4x4 partnerLocalToWorldMat = Matrix4x4.TRS(partner.position, partner.rotation, Vector3.one);
+
+		// Calculate the new position of the player's *head*, not their origin.
+		// The player teleports when their head passes through the surface, so
+		// the relative position of the head is what needs to remain constant.
+		Vector3 localHeadPos = selfWorldToLocalMat.MultiplyPoint3x4(playerHeadPos);
+		localHeadPos = local180 * localHeadPos;
+		Vector3 newHeadPos = partnerLocalToWorldMat.MultiplyPoint3x4(localHeadPos);
+
+		// Player rotation only cares about Y. In fact, when I tried to
+		// do rotation for all axes, like with Rigidbodies below, it
+		// didn't work quite right. Not sure why. *shrug*
+		Quaternion partner180 = Quaternion.AngleAxis(180, partner.up);
+		Quaternion partnerInvRot = partner180 * partner.rotation;
+		float inputY = transform.rotation.eulerAngles.y;
+		float outputY = partnerInvRot.eulerAngles.y;
+		float diffY = outputY - inputY;
+		float playerY = playerOriginRot.eulerAngles.y;
+		float newY = playerY + diffY;
+		destRotation = Quaternion.Euler(0, newY, 0);
+
+		// From the newHeadPos and rotation delta, calculate the new origin
+		// position which is what we need for teleporting.
+		Vector3 headToOrigin = playerOriginPos - playerHeadPos;
+		headToOrigin = Quaternion.AngleAxis(diffY, Vector3.up) * headToOrigin;
+		destPosition = newHeadPos + headToOrigin;
+
+		// Find new velocity
+
+		// Use cosine of angles (aka output of dot product) instead of angles
+		// since it's cheaper to compute Vector3.Dot than Vector3.Angle, and
+		// with Dot its easier to compare directionless - just use Abs.
+		const float LOOKING_AT_PORTAL = 0.70710678f; // cos(45 deg)
+		const float SNAP_KINDA_CLOSE  = 0.96592582f; // cos(15 deg)
+		const float SNAP_CLOSE        = 0.99254615f; // cos(7 deg)
+		const float SNAP_NEARLY_EXACT = 0.99984769f; // cos(1 deg)
+
+		Vector3 playerVel = localPlayer.GetVelocity();
+		Vector3 localVel;
+
+		// Transform player's momentum into portal-local space, where 'forward'
+		// is directly into this portal.
+		if (momentumSnapping) {
+			if (Mathf.Abs(transform.forward.y) > SNAP_CLOSE) {
+				// Player is moving approximately vertically towards a portal approximately
+				// parallel to the ground.
+				// We want to snap them to alignment, but there is an issue: in an infinite
+				// fall situation, it can be very hard to get out. Any horizontal momentum
+				// the player obtains from pressing on the thumbstick/WASD gets erased each
+				// time they pass through the portal, which is happening frequently. It makes
+				// moving out very slow.
+				// So instead, take a hint from Portal's (the game) funneling system and
+				// require the player to be looking at the portal to do the snapping. If they
+				// look away, require a nearly perfect vertical momentum. That way they can
+				// keep infinite-falling once they start, but it's still easy to get out just
+				// by looking away.
+				float playerVertAlignment = Mathf.Abs(playerVel.normalized.y);
+				if ( playerVertAlignment > SNAP_NEARLY_EXACT ||
+				     (playerVertAlignment > SNAP_CLOSE &&
+				      Vector3.Dot((trackingHead.rotation * Vector3.forward), transform.forward) > LOOKING_AT_PORTAL) )
+				{
+					// Snap! Player must be moving towards the portal,
+					// so we can ignore the direction of their velocity.
+					localVel = Vector3.forward * Mathf.Abs(playerVel.y);
+				}
+				else {
+					localVel = transform.InverseTransformDirection(playerVel);
+				}
+			}
+			else if (Mathf.Abs(Vector3.Dot(playerVel.normalized, transform.forward)) > SNAP_KINDA_CLOSE) {
+				// Portal is not flat on the ground, but player is still
+				// approaching portal head-on - snap to perfectly aligned.
+				// Output magnitude is reduced to the component of the
+				// player's velocity that is aligned to the portal.
+				localVel = Vector3.forward * Vector3.Dot(playerVel, transform.forward);
+			}
+			else {
+				localVel = transform.InverseTransformDirection(playerVel);
+			}
+		}
+		else {
+			localVel = transform.InverseTransformDirection(playerVel);
+		}
+
+		// Flip momentum around, so it's going out instead of in
+		localVel = local180 * localVel;
+
+		// Transform local momentum back into world-space, from the partner
+		// portal's rotation.
+		Quaternion localToPartnerRot = partner.rotation;
+		if (momentumSnapping) {
+			// Instead of like above where we snap the player's incoming
+			// velocity vector, here we're snapping the partner portal's
+			// outwards direction (-forward) to vertical if it's nearly there.
+			// The partner outwards direction is NOT necessarily the same
+			// as the player's new final velocity direction.
+			Vector3 partnerOutwards = -partner.forward;
+			float partnerVertAlignment = Mathf.Abs(Vector3.Dot(partnerOutwards, Vector3.up));
+			if (Mathf.Approximately(partnerVertAlignment, 1)) {
+				// Partner is already perfectly parallel to ground, no need to snap it
+			}
+			else if (partnerVertAlignment > SNAP_CLOSE) {
+				// targetDir is Vector3.up if the portal is "on the ground"
+				// -Vector3.up if the portal is "on the ceiling".
+				Vector3 targetDir = Vector3.up * Mathf.Sign(partnerOutwards.y);
+				// Get a quaternion which would rotate the partner's outwards
+				// vector to be vertical, and apply it to the local-to-world
+				// transformation. In other words, this pretends the yaw/pitch
+				// of the portal were adjusted to become vertical, but roll is kept.
+				Quaternion toVertical = Quaternion.FromToRotation(partnerOutwards, targetDir);
+				localToPartnerRot = toVertical * localToPartnerRot;
+			}
+		}
+		destVelocity = localToPartnerRot * localVel;
+
+		Debug.Log("OLD TELEPORT");
+		if (callbackScript != null) {
+			callbackScript.SetProgramVariable("sourcePortal", this);
+			callbackScript.SendCustomEvent("_PortalWillTeleportPlayer");
+		}
+		if (activatePartnerOnTeleport) {
+			partner.gameObject.SetActive(true);
+		}
+		if (partnerPortalBehaviour != null) {
+			partnerPortalBehaviour.OnWillReceivePlayer(this);
+		}
 
 		// Do teleport
 		#if UNITY_EDITOR
 			// AlignRoomWithSpawnPoint doesn't work properly in ClientSim
 			localPlayer.TeleportTo(
-				newPos,
-				newRot,
+				destPosition,
+				destRotation,
 				VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignPlayerWithSpawnPoint,
 				/*lerpOnRemote=*/false);
 		#else
 			if (!isHoloport) {
 				localPlayer.TeleportTo(
-					newPos,
-					newRot,
+					destPosition,
+					destRotation,
 					VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignRoomWithSpawnPoint,
 					/*lerpOnRemote=*/false);
 			}
 			else {
 				localPlayer.TeleportTo(
-					newPos,
-					newRot,
+					destPosition,
+					destRotation,
 					VRC.SDKBase.VRC_SceneDescriptor.SpawnOrientation.AlignPlayerWithSpawnPoint,
 					/*lerpOnRemote=*/false);
 			}
 		#endif
 
-		localPlayer.SetVelocity(newVel);
+		localPlayer.SetVelocity(destVelocity);
+
+		if (deactivateSelfOnTeleport) {
+			gameObject.SetActive(false);
+		}
 	}
 
 	/*
@@ -1103,26 +1309,32 @@ public class PortalBehaviour : UdonSharpBehaviour
 				sync.FlagDiscontinuity();
 			}
 
+			// Compute new transform
+			Vector3 localPos = transform.InverseTransformPoint(body.position);
+			localPos = Quaternion.AngleAxis(180, Vector3.up) * localPos;
+			destPosition = partner.TransformPoint(localPos);
+
+			Quaternion partner180 = Quaternion.AngleAxis(180, partner.up);
+			Quaternion rotDiff = partner.rotation * Quaternion.Inverse(transform.rotation);
+			destRotation = partner180 * rotDiff * body.rotation;
+
+			Vector3 localVel = transform.InverseTransformDirection(body.velocity);
+			destVelocity = partner180 * partner.TransformDirection(localVel);
+
+			// Inform others
 			if (callbackScript != null) {
 				callbackScript.SetProgramVariable("sourcePortal", this);
 				callbackScript.SetProgramVariable("teleportedObject", body);
 				callbackScript.SendCustomEvent("_PortalWillTeleportObject");
 			}
+			if (partnerPortalBehaviour != null) {
+				partnerPortalBehaviour.OnWillReceiveObject(this, body);
+			}
 
-			Vector3 localPos = transform.InverseTransformPoint(body.position);
-			localPos = Quaternion.AngleAxis(180, Vector3.up) * localPos;
-			Vector3 newPos = partner.TransformPoint(localPos);
-
-			Quaternion partner180 = Quaternion.AngleAxis(180, partner.up);
-			Quaternion rotDiff = partner.rotation * Quaternion.Inverse(transform.rotation);
-			Quaternion newRot = partner180 * rotDiff * body.rotation;
-
-			Vector3 localVel = transform.InverseTransformDirection(body.velocity);
-			Vector3 newVel = partner180 * partner.TransformDirection(localVel);
-
-			body.position = newPos;
-			body.rotation = newRot;
-			body.velocity = newVel;
+			// Do teleport
+			body.position = destPosition;
+			body.rotation = destRotation;
+			body.velocity = destVelocity;
 
 			// Object is now somewhere else, treat it as if it has exited the
 			// trigger and clear prevBody to make room for other objects. If
@@ -1198,7 +1410,8 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	// Called by the partner portal (if the partner is a PortalBehaviour)
 	// when it is about to teleport the player here.
-	public void OnWillReceivePlayer() {
+	public void OnWillReceivePlayer(PortalBehaviour source)
+	{
 		// After being teleported here, there may be a few frames of
 		// rendering the portal before OnPlayerTriggerStay is called
 		// to update `trackingHeadInTrigger`. That can lead to flicker
@@ -1206,5 +1419,23 @@ public class PortalBehaviour : UdonSharpBehaviour
 		// is still in the portal. Set this true assuming that the
 		// head will always be in the trigger after teleporting.
 		trackingHeadInTrigger = true;
+
+		if (callbackScript) {
+			callbackScript.SetProgramVariable("sourcePortal", source);
+			callbackScript.SetProgramVariable("targetPortal", this);
+			callbackScript.SendCustomEvent("_PortalWillReceivePlayer");
+		}
+	}
+
+	// Called by the partner portal (if the partner is a PortalBehaviour)
+	// when it is about to teleport an object here.
+	public void OnWillReceiveObject(PortalBehaviour source, Rigidbody body)
+	{
+		if (callbackScript) {
+			callbackScript.SetProgramVariable("sourcePortal", source);
+			callbackScript.SetProgramVariable("targetPortal", this);
+			callbackScript.SetProgramVariable("teleportedObject", body);
+			callbackScript.SendCustomEvent("_PortalWillReceiveObject");
+		}
 	}
 }
