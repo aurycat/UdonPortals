@@ -358,7 +358,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private Camera dummyStereoCamera;
 
 	// Cached reference to the renderer and trigger collider on this object
-	private new Renderer renderer;
+	private Renderer _renderer; // Use '_renderer' name to avoid warning about conflict with 'Component.renderer'.
+	                            // The warning says to use the 'new' keyword, but adding it causes a different
+	                            // warning saying that 'new' isn't necessary. So uh. Just give it a different name.
 	private Collider trigger;
 
 	// Texture size at the previous frame
@@ -419,9 +421,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 		partnerPortalBehaviour = partner.GetComponent<PortalBehaviour>();
 
 		if (!_noVisuals) {
-			renderer = GetComponent<Renderer>();
-			if (renderer != null) {
-				Material mat = renderer.material;
+			_renderer = GetComponent<Renderer>();
+			if (_renderer != null) {
+				Material mat = _renderer.material;
 				if (mat != null) {
 					if(!mat.HasProperty("_ViewTexL") || !mat.HasProperty("_ViewTexR")) {
 						Debug.LogError($"Portal '{name}' is set to material '{mat.name}' which does not have the _ViewTexL or _ViewTexR properties.");
@@ -509,10 +511,10 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 			texturesNeedRefresh = true;
 
-			renderer.material.SetTexture("_ViewTexL", viewTexL);
+			_renderer.material.SetTexture("_ViewTexL", viewTexL);
 
 			if (inVR) {
-				renderer.material.SetTexture("_ViewTexR", viewTexR);
+				_renderer.material.SetTexture("_ViewTexR", viewTexR);
 				dummyStereoCamera.stereoTargetEye = StereoTargetEyeMask.Both;
 			}
 		}
@@ -568,7 +570,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		portalCameraL = null;
 		portalCameraR = null;
 		dummyStereoCamera = null;
-		renderer = null;
+		_renderer = null;
 		trigger = null;
 		widthCache = 0;
 		heightCache = 0;
@@ -590,22 +592,22 @@ public class PortalBehaviour : UdonSharpBehaviour
 	{
 		if (_noVisuals) {
 			return;
-		} else if (renderer == null) {
-			renderer = GetComponent<Renderer>();
-			if (renderer != null) {
-				renderer.material = mat;
+		} else if (_renderer == null) {
+			_renderer = GetComponent<Renderer>();
+			if (_renderer != null) {
+				_renderer.material = mat;
 			}
 			return;
 		} else if (mat == null) {
-			renderer.material = null;
+			_renderer.material = null;
 			return;
 		} else if (!mat.HasProperty("_ViewTexL") || !mat.HasProperty("_ViewTexR")) {
 			Debug.LogError($"Attempt to change portal '{name}' material {mat.name} which does not have the _ViewTexL or _ViewTexR properties.");
 			return;
 		}
 
-		renderer.material = mat;
-		mat = renderer.material;
+		_renderer.material = mat;
+		mat = _renderer.material;
 
 		if(mat.HasProperty("_ViewTexL") && mat.HasProperty("_ViewTexR")) {
 			mat.SetTexture("_ViewTexL", viewTexL);
@@ -773,9 +775,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 			return;
 		} else if (inVR) {
 			if (!Utilities.IsValid(player) || player.isLocal) {
-				if (renderer != null && renderer.material != null) {
-					renderer.material.SetTexture("_ViewTexL", null);
-					renderer.material.SetTexture("_ViewTexR", null);
+				if (_renderer != null && _renderer.material != null) {
+					_renderer.material.SetTexture("_ViewTexL", null);
+					_renderer.material.SetTexture("_ViewTexR", null);
 				}
 			}
 		}
