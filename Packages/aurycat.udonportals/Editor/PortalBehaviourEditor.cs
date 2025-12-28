@@ -30,6 +30,8 @@ public class PortalBehaviourEditor : Editor
 	SerializedProperty portalCameraPrefabProp;
 	SerializedProperty portalCameraRootProp;
 
+	GUIContent useObliqueProjectionDocs;
+
 	static bool showAdvanced;
 
 	void OnEnable()
@@ -55,6 +57,8 @@ public class PortalBehaviourEditor : Editor
 
 		portalCameraPrefabProp = serializedObject.FindProperty("portalCameraPrefab");
 		portalCameraRootProp = serializedObject.FindProperty("portalCameraRoot");
+
+		useObliqueProjectionDocs = new GUIContent("Oblique Projection Documentation");
 	}
 
 	public override void OnInspectorGUI()
@@ -190,11 +194,14 @@ public class PortalBehaviourEditor : Editor
 				GUILayout.BeginVertical("box");
 				GUILayout.Space(5);
 				EditorGUILayout.HelpBox(
-					"Using oblique projection can interfere with some shader effects such " +
-					"as caustics in water. REGARDLESS, you should probably leave this enabled. " +
-					"Read the pros & cons above the 'useObliqueProjection' property " +
-					"in PortalBehavior.cs before changing this.",
+					"Using oblique projection can interfere with some shader effects e.g. " +
+					"water caustics. However, disabling oblique projection will break " +
+					"portal rendering in many circumstances. Please read the docs for this " +
+					"setting before changing:",
 					MessageType.Info);
+				if (IndentedButton(useObliqueProjectionDocs)) {
+					Application.OpenURL("https://github.com/aurycat/UdonPortals/wiki/Public-API-of-PortalBehaviour#useobliqueprojection-bool-property");
+				}
 				GUILayout.Space(5);
 				EditorGUILayout.PropertyField(useObliqueProjectionProp);
 				if (!serializedObject.isEditingMultipleObjects) {
@@ -214,7 +221,7 @@ public class PortalBehaviourEditor : Editor
 				GUILayout.BeginVertical("box");
 				GUILayout.Space(5);
 				EditorGUILayout.HelpBox(
-					"These are automatically set. You shouldn't change these.",
+					"These are automatically set. You probably shouldn't change these.",
 					MessageType.Info);
 				GUILayout.Space(5);
 				EditorGUILayout.PropertyField(portalCameraPrefabProp);
@@ -265,5 +272,11 @@ public class PortalBehaviourEditor : Editor
 		path = AssetDatabase.GenerateUniqueAssetPath(path);
 		AssetDatabase.CreateAsset(tex, path);
 		return tex;
+	}
+
+	bool IndentedButton(GUIContent content)
+	{
+		Rect r = EditorGUI.IndentedRect(GUILayoutUtility.GetRect(content, GUI.skin.button));
+		return GUI.Button(r, content, GUI.skin.button);
 	}
 }

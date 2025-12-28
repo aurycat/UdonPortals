@@ -36,8 +36,10 @@ using System;
 using UnityEditor;
 using VRC.SDK3.Components;
 using VRC.SDK3.Rendering;
+using JetBrains.Annotations;
 
-// See 'operatingMode' property documentation below for info
+// Documentation at:
+// https://github.com/aurycat/UdonPortals/wiki/Public-API-of-PortalBehaviour#operatingmode-portalbehaviourmode-field
 public enum PortalBehaviourMode
 {
 	VisualsAndPhysics,
@@ -46,200 +48,85 @@ public enum PortalBehaviourMode
 }
 
 [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
+[HelpURL("https://github.com/aurycat/UdonPortals/wiki")]
 public class PortalBehaviour : UdonSharpBehaviour
 {
 	// ========================================================================
 	// PUBLIC PROPERTIES
+	//
+	// Documentation at:
+	// https://github.com/aurycat/UdonPortals/wiki/Public-API-of-PortalBehaviour
+	//
 	// ========================================================================
 
-	/**
-	 * VisualsAndPhysics:
-	 *     Default behavior. You can look through and walk through the portal.
-	 * VisualsOnly:
-	 *     The portal looks the same, but does not do any physics/teleporting
-	 *     to players or objects that pass through it. Use this if your portal
-	 *     is only for looks and cannot be passed through.
-	 * PhysicsOnly:
-	 *     The portal has the same teleporting behavior but does not show any
-	 *     image or render anything or even create a camera. If all you want
-	 *     is the physics/teleporting effect of the portal but not the visuals,
-	 *     use this to save performance by not calculating camera stuff.
-	 *
-	 * The PortalBehaviour component must be disabled and reenabled for changes
-	 * of this setting to take effect.
-	 */
-	[Tooltip("Whether the portal does visuals at all, does physics/teleporting at all, or does both. Doing both is the standard behavior.")]
+	[Tooltip("Whether the portal can be looked through (VisualsOnly), telported through (PhysicsOnly), or both (VisualsAndPhysics).")]
+	[PublicAPI]
 	public PortalBehaviourMode operatingMode = PortalBehaviourMode.VisualsAndPhysics;
 
-	/**
-	 * The transform of the partner portal. Normally this should be set to
-	 * another PortalBehaviour object, but it could be anything. The "partner"
-	 * doesn't actually have to be a working portal, it's just an arbitrary
-	 * position in the world.
-	 *
-	 * This transform can be changed at any time. Don't set it to null.
-	 */
-	[Tooltip("The transform of the partner portal. Normally this should be set to another PortalBehaviour object, but it can be anything.")]
+	[Tooltip("The transform of the partner portal. Normally this is set to another PortalBehaviour object, but it can be anything.")]
+	[PublicAPI]
 	public Transform partner;
 
-	/**
-	 * Auto-detected from `partner`.
-	 */
-	[HideInInspector]
-	public PortalBehaviour partnerPortalBehaviour;
-
-	/**
-	 * The Unity layers to show through the portal. Default value is to show:
-	 *  Default, TransparentFX, Ignore Raycast, Interactive, Player,
-	 *  Environment, Pickup, PickupNoEnvironment, Walkthrough, MirrorReflection,
-	 *  and all non-VRC custom layers (22 and above).
-	 */
 	[Tooltip("Only the selected layers are shown in the portal. Water and PlayerLocal are never shown.")]
 	[FieldChangeCallback(nameof(layerMask))]
+	[PublicAPI]
 	public LayerMask _layerMask = unchecked((int)0xFFC66B07);
 	public LayerMask layerMask {
 		get => _layerMask;
 		set { _UpdateLayerMask(value); }
 	}
 
-	/**
-	 * The size of the render textures as a proportion of the screen size.
-	 * 1 means maximum quality, smaller is lower quality.
-	 */
 	[Tooltip("Higher resolution looks better but costs more performance, just like a Mirror.")]
 	[Range(0.2f, 1.0f)]
 	[FieldChangeCallback(nameof(textureResolution))]
+	[PublicAPI]
 	public float _textureResolution = 1.0f;
 	public float textureResolution {
 		get => _textureResolution;
 		set { _UpdateTextureResolution(value); }
 	}
 
-	/**
-	 * If non-null, this script will get sent events by the portal. Before
-	 * sending an event, variables will get set on the callback script as
-	 * parameters. The variable "sourcePortal" (type PortalBehaviour) will
-	 * always get set to <this> portal.
-	 *
-	 *  - "_PortalWillTeleportPlayer": The portal is about to teleport the
-	 *     local player.
-	 *  - "_PortalWillTeleportObject": The portal is about to teleport a
-	 *     non-player Rigidbody that **is owned by the local player**. The
-	 *     variable "teleportedObject" will be set to the Rigidbody.
-	 */
-	[Tooltip("Receives events about things the portal has done. Read the documentation in PortalBehaviour.cs for more info.")]
+	[Tooltip("Receives events about things the portal has done. See 'Callback Script' wiki page on GitHub for more info.")]
+	[PublicAPI]
 	public UdonBehaviour callbackScript;
 
-	/**
-	 * When enabled, the portal will attempt to align the player's
-	 * momentum/velocity to the orientation of the portal when the
-	 * player travels through it. For portals that point close to
-	 * vertically (i.e. almost flat on the ground or on the ceiling),
-	 * using this setting will pretend the portal is perfectly axis-
-	 * aligned.
-	 *
-	 * This setting is useful for portals that can be arbitrarily
-	 * moved by the user (i.e. pickups), because placing the portal
-	 * perfectly flat with your hand in VR is nearly impossible, so
-	 * this makes it pretend like they did.
-	 *
-	 * This setting is also good for infinite falling loops or infinite
-	 * bouncing between two portals on the floor, because it will
-	 * cancel out horizontal momentum, making it easier for the player
-	 * to stay in the portal.
-	 *
-	 * The vertical snapping takes effect when the player is looking
-	 * at the portal. That way, once the player wants to leave the
-	 * infinite fall/bounce and they look away and start to move,
-	 * the portal won't cancel out their horizontal momentum and make
-	 * it hard to leave.
-	 *
-	 * If a portal is on a wall, like a door, this setting can be
-	 * turned off because it will have nearly no effect.
-	 */
 	[Tooltip("When enabled, the portal attempts to align the player's momentum to the portal orientation when traveling through it. Additionally it has some extra snapping behavior for flat portals (i.e. on the floor or ceiling) to make infinite falls or infinite bouncing easier on the player. If a portal is on a wall, like a door, this setting can be turned off because it will have nearly no effect.")]
+	[PublicAPI]
 	public bool momentumSnapping = false;
 
-	[Tooltip("When enabled, the partner portal/GameObject is automatically activated when the player is teleported to it. For best performance, portal GameObjects should be inactive when the player can't see them (e.g. via trigger colliders). However, teleporting to an inactive portal can cause flicker for 1 frame before the trigger detects the player. Immediately activating the portal on teleport via this setting can help.")]
+	[Tooltip("When enabled, the partner portal/GameObject is automatically activated when the player is teleported to it. See 'Performance and Optimization' wiki page on GitHub for more info.")]
+	[PublicAPI]
 	public bool activatePartnerOnTeleport = true;
 
-	[Tooltip("When enabled, this portal will be deactivated after the player passes through it. Having a portal deactive whenever possible helps with performance, so if the player can no longer see this portal after passing through, consider using this setting to disable it automatically.")]
+	[Tooltip("When enabled, this portal will be deactivated after the player passes through it. See 'Performance and Optimization' wiki page on GitHub for more info.")]
+	[PublicAPI]
 	public bool deactivateSelfOnTeleport = false;
 
 	// ========================================================================
 	// ADVANCED PUBLIC PROPERTIES
+	//
+	// Documentation at:
+	// https://github.com/aurycat/UdonPortals/wiki/Public-API-of-PortalBehaviour
+	//
 	// ========================================================================
 
-	/**
-	 * Portal surface textures. In VR, both Left and Right textures are used.
-	 * In Desktop, only the Left texture is used. These should be set to a
-	 * dummy RenderTexture asset, unique for each portal. (Only needed
-	 * because Udon can't instantiate/construct RenderTextures at runtime!)
-	 *
-	 * You should not change these at runtime. If you need to for some reason,
-	 * call RefreshTextures() after changing them. Don't set them to null.
-	 */
 	[Tooltip("The render texture used for the left eye in VR, or the entire view in Desktop.")]
+	[PublicAPI]
 	public RenderTexture viewTexL;
 	[Tooltip("The render texture used for the right eye in VR.")]
+	[PublicAPI]
 	public RenderTexture viewTexR;
 
-	/**
-	 * The portal teleports the player when their head tracking point crosses
-	 * the portal surface plane. This value shifts that plane (for the purposes
-	 * of teleporting). Positive values move the plane "out" of the portal, so
-	 * you teleport earlier; negative values move the plane "into" the portal,
-	 * so you teleport later.
-	 *
-	 * If your portal mesh is a flat plane, it is helpful to have a slight
-	 * positive offset (about 0.03 is good) for this value so the player
-	 * teleports slightly before their head crosses the portal surface. This
-	 * reduces the chance of part of their field-of-view from clipping through
-	 * the portal surface for 1 frame before getting teleported, causing an
-	 * annoying "flash". The downside is that if the player walks through the
-	 * portal backwards, the larger teleportPlaneOffset will mean they'll
-	 * teleport too early and they'll see more of a flash! There isn't a
-	 * good way to fix this, which is why I recommend not using a flat mesh.
-	 *
-	 * If your portal mesh is not flat but an inverted cube shape (recommended)
-	 * then this should be left at 0.
-	 */
-	[Tooltip("The distance from the portal surface where the player will teleport when their head crosses. Read this property's documentation in PortalBehaviour.cs before changing!")]
+	[Tooltip("The distance from the portal surface where the player will teleport when their head crosses. See 'Public API of PortalBehaviour' wiki page on GitHub for more info.")]
+	[PublicAPI]
 	public float teleportPlaneOffset = 0f;
 
-	/**
-	 * Holoport locomotion breaks the normal method for detecting walking
-	 * through the portal, and the method for teleporting. There is a fix,
-	 * but the detection method is a bit of a hack and relies on comparing
-	 * avatar bone positions to tracking positions. I'm worried that it could
-	 * possibly cause problems in certain weird use cases (situations where
-	 * an avatar is moved separately from the viewpoint -- e.g. MMD worlds)
-	 * so this option lets you disable the Holoport fix if needed.
-	 */
-	[Tooltip("Read this property's documentation in PortalBehaviour.cs before changing!")]
+	[Tooltip("See 'Public API of PortalBehaviour' wiki page on GitHub for info on this setting.")]
+	[PublicAPI]
 	public bool useHoloportFix = true;
 
-	/**
-	 * Normally portals use an "oblique projection matrix" to solve a problem
-	 * known as "Banana Juice". It's best described in this video by the team
-	 * that made the Portal games: https://youtu.be/ivyseNMVt-4&t=1064
-	 *
-	 * tl;dw when rendering the virtual portal camera, the entire world behind
-	 * the plane of the portal is clipped. Since this plane isn't necessarily
-	 * parallel to the view plane of the camera, an "oblique near clipping plane"
-	 * is used.
-	 *
-	 * One downside of using an oblique near clipping plane is it screws with
-	 * depth-buffer based effects when viewed through the portal. For example,
-	 * caustics in water shaders won't work (I believe it is resolvable by
-	 * modifying the water shader to account for the oblique projection, but
-	 * I don't know how.)
-	 *
-	 * If your scene uses depth-buffer-based effects, **and you avoid the
-	 * Banana Juice issue by making sure there's nothing behind your portal**
-	 * you may try disabling this setting.
-	 */
-	[Tooltip("Read this property's documentation in PortalBehaviour.cs before changing!")]
+	[Tooltip("See 'Public API of PortalBehaviour' wiki page on GitHub for info on this setting.")]
+	[PublicAPI]
 	public bool _useObliqueProjection = true;
 	// This getter/setter used to do extra stuff, now just here for backwards compatability
 	public bool useObliqueProjection {
@@ -247,86 +134,38 @@ public class PortalBehaviour : UdonSharpBehaviour
 		set { _useObliqueProjection = value; }
 	}
 
-	/**
-	 * The offset, relative to the portal surface, of the oblique near
-	 * clipping plane of the portal camera. Probably leave this at 0.
-	 *
-	 * Positive values move the plane "out" of the portal; negative
-	 * values move the plane "into" the portal.
-	 *
-	 * Due to inaccuracies in the stereo separation value, portals without
-	 * any sort of opaque frame around their edge may have a slightly visible
-	 * "gap" at the floor when viewed in VR at some angles. If that happens,
-	 * you can set this to a slightly positive value, e.g. 0.02, which
-	 * should help. However it has the downside that at very shallow viewing
-	 * angles, you may see the wall behind the partner portal, if present.
-	 */
-	[Tooltip("Read this property's documentation in PortalBehaviour.cs before changing!")]
+	[Tooltip("See 'Public API of PortalBehaviour' wiki page on GitHub for info on this setting.")]
+	[PublicAPI]
 	public float obliqueClipPlaneOffset = 0f;
 
-	/**
-	 * The oblique near clipping plane is (surprise) a near clipping plane, and
-	 * as with any normal near clipping plane, the camera cannot be positioned
-	 * at or in front of it, otherwise all the careful math involved in rendering
-	 * breaks down. And for reasons I don't understand, it seems to break the
-	 * the rendering permanently until the camera is reset, even if the camera
-	 * moves back behind the clipping plane. Also for reasons I don't fully
-	 * understand, the camera needs to be at least a few cm behind the plane to
-	 * prevent those issues.
-	 *
-	 * This value is the distance of the portal camera from the clipping plane
-	 * at which oblique clipping is disabled and the camera renders normally.
-	 *
-	 * If this value is too large, stuff behind the partner portal will pop
-	 * into view when you get close to the portal. If this value is too small,
-	 * you'll see weird zfighting artifacts through the portal after you walk
-	 * through it a few times. 5cm has seemed to work as a good default, but
-	 * you may need to adjust. This value should never be negative.
-	 */
-	[Tooltip("Read this property's documentation in PortalBehaviour.cs before changing!")]
+	[Tooltip("See 'Public API of PortalBehaviour' wiki page on GitHub for info on this setting.")]
+	[PublicAPI]
 	public float obliqueClipPlaneDisableDist = 0.05f;
 
-	/**
-	 * If set to a value > 0, this overrides the stereo separation of the VR
-	 * portal camera with a custom value. This is essentially only useful for
-	 * demonstrating the effect of stereo separation on VR rendering.
-	 */
 	[HideInInspector]
+	[PublicAPI]
 	public float manualStereoSeparation = 0f;
 
-	/**
-	 * This should be set to the Portal Camera prefab in the RuntimePrefabs
-	 * folder of the UdonPortals package. This prefab contains the virtual
-	 * head camera. It gets instantiated when the portal is enabled, and is
-	 * destroyed when disabled.
-	 */
-	[Tooltip("Leave this as the default PortalCamera prefab asset unless you know what you're doing!")]
+	[Tooltip("See 'Public API of PortalBehaviour' wiki page on GitHub for info on this setting.")]
+	[PublicAPI]
 	public GameObject portalCameraPrefab;
 
-	/**
-	 * PortalCamera prefab instance. You can set this manually if you need to
-	 * make some special customization to the portal camera object for only
-	 * one portal.
-	 */
-	[Tooltip("If left unset, gets automatically set to a generated instance of portalCameraPrefab.")]
+	[Tooltip("If left unset, gets automatically set to a generated instance of portalCameraPrefab. See 'Public API of PortalBehaviour' wiki page on GitHub for more info.")]
+	[PublicAPI]
 	public Transform portalCameraRoot;
 
 
 	// ========================================================================
 	// PUBLIC RUNTIME PROPERTIES
+	//
+	// Documentation at:
+	// https://github.com/aurycat/UdonPortals/wiki/Public-API-of-PortalBehaviour
+	//
 	// ========================================================================
 
-	/**
-	 * These are set immediately before sending the _PortalWillTeleportPlayer
-	 * or _PortalWillTeleportObject events to the callback script. The callback
-	 * script can read these variables to know where the object will be
-	 * teleported to. In VR, the position and rotation of players are of the
-	 * AvatarRoot tracking data. In Desktop, they are of the Origin tracking data.
-	 * The callback can also modify these variables to affect the teleport.
-	 */
-	[HideInInspector] public Vector3 destPosition;
-	[HideInInspector] public Quaternion destRotation;
-	[HideInInspector] public Vector3 destVelocity;
+	[HideInInspector] [PublicAPI] public Vector3 destPosition;
+	[HideInInspector] [PublicAPI] public Quaternion destRotation;
+	[HideInInspector] [PublicAPI] public Vector3 destVelocity;
 
 
 	// ========================================================================
@@ -334,6 +173,10 @@ public class PortalBehaviour : UdonSharpBehaviour
 	// ========================================================================
 
 	private bool savePortalCameraRoot;
+
+	// PortalBehaviour component attached to the same GameObject as the partner
+	// transform, if such a component exists. Otherwise, null.
+	private PortalBehaviour partnerPortalBehaviour;
 
 	// This is the Transform of the "virtual" head, i.e. the player's head
 	// relative to the current portal's front-face, transformed to be relative
@@ -413,7 +256,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		} else if (!_noVisuals && (viewTexL == viewTexR)) {
 			Debug.LogError($"Portal '{name}' has the same texture set for both View Tex L and View Tex R. Please set them to two separate RenderTextures, unique to this portal.");
 			return;
-		} else if (_textureResolution <= 0) {
+		} else if (_textureResolution <= 0 || _textureResolution > 1) {
 			Debug.LogError($"Portal '{name}' has texture resolution set to an illegal value ({_textureResolution}).");
 			return;
 		}
@@ -588,6 +431,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 	 * function, the textures won't update properly until the Portal is
 	 * turned off and back on.
 	 */
+	[PublicAPI]
 	public void SetMaterial(Material mat)
 	{
 		if (_noVisuals) {
@@ -623,6 +467,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 	 * This should be called if the viewTexL or viewTexR properties are
 	 * changed externally while the portal is active.
 	 */
+	[PublicAPI]
 	public void RefreshTextures()
 	{
 		texturesNeedRefresh = true;
@@ -632,6 +477,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 	 * This should be called if the partner property is changed while
 	 * the portal is active.
 	 */
+	[PublicAPI]
 	public void RefreshPartner()
 	{
 		if (partner == null) {
@@ -1218,7 +1064,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	private void _UpdateTextureResolution(float val)
 	{
-		if (val <= 0) {
+		if (val <= 0 || val > 1) {
 			Debug.LogError($"Attempt to set texture resolution on portal '{name}' to an illegal value ({val}).");
 			return;
 		}
