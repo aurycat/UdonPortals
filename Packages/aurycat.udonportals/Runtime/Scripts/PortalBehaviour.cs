@@ -234,6 +234,10 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	private bool texturesNeedRefresh;
 
+#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
+	private int _Udon_UdonPortals_ScreenProjectionMatrixID;
+	private int _Udon_UdonPortals_RenderOKID;
+#endif
 
 	void OnEnable()
 	{
@@ -370,6 +374,12 @@ public class PortalBehaviour : UdonSharpBehaviour
 		prevInFront = false;
 		trackingHeadInTrigger = false;
 		isHoloport = false;
+
+		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
+			_Udon_UdonPortals_ScreenProjectionMatrixID = VRCShader.PropertyToID("_Udon_UdonPortals_ScreenProjectionMatrix");
+			_Udon_UdonPortals_RenderOKID = VRCShader.PropertyToID("_Udon_UdonPortals_RenderOK");
+			_SetScreenProjectionMatrix();
+		#endif
 
 	} /* OnEnable */
 
@@ -531,6 +541,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 		VRCCameraSettings screenCamera = VRCCameraSettings.ScreenCamera;
 		VRCCameraSettings.GetCurrentCamera(out VRCCameraSettings internalCamera, out Camera externalCamera);
 		if (internalCamera != screenCamera) {
+			#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
+				VRCShader.SetGlobalFloat(_Udon_UdonPortals_RenderOKID, 0);
+			#endif
 			return;
 		}
 
@@ -647,6 +660,10 @@ public class PortalBehaviour : UdonSharpBehaviour
 			}
 			portalCameraR.Render();
 		}
+
+		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
+			VRCShader.SetGlobalFloat(_Udon_UdonPortals_RenderOKID, 1);
+		#endif
 
 	} /* OnWillRenderObject */
 
@@ -1100,6 +1117,20 @@ public class PortalBehaviour : UdonSharpBehaviour
 		_textureResolution = val;
 		texturesNeedRefresh = true;
 	}
+
+#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
+	private void _SetScreenProjectionMatrix()
+	{
+		// Get non-stereo projection matrix of main camera
+		VRCCameraSettings screenCamera = VRCCameraSettings.ScreenCamera;
+		portalCameraL.aspect        = screenCamera.Aspect;
+		portalCameraL.nearClipPlane = screenCamera.NearClipPlane;
+		portalCameraL.farClipPlane  = screenCamera.FarClipPlane;
+		portalCameraL.fieldOfView   = screenCamera.FieldOfView;
+		portalCameraL.ResetProjectionMatrix();
+		VRCShader.SetGlobalMatrix(_Udon_UdonPortals_ScreenProjectionMatrixID, portalCameraL.projectionMatrix);
+	}
+#endif
 
 	// Called by the partner portal (if the partner is a PortalBehaviour)
 	// when it is about to teleport the player here.
