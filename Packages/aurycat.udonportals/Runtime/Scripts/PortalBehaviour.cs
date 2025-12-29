@@ -236,6 +236,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 #if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
 	private int _Udon_UdonPortals_ScreenProjectionMatrixID;
+	private int _Udon_UdonPortals_ScreenViewMatrixID;
 	private int _Udon_UdonPortals_RenderOKID;
 #endif
 
@@ -377,6 +378,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
 			_Udon_UdonPortals_ScreenProjectionMatrixID = VRCShader.PropertyToID("_Udon_UdonPortals_ScreenProjectionMatrix");
+			_Udon_UdonPortals_ScreenViewMatrixID = VRCShader.PropertyToID("_Udon_UdonPortals_ScreenViewMatrix");
 			_Udon_UdonPortals_RenderOKID = VRCShader.PropertyToID("_Udon_UdonPortals_RenderOK");
 			_SetScreenProjectionMatrix();
 		#endif
@@ -503,6 +505,11 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private Vector3 ocpPos = Vector3.zero;
 	private Plane ocpDisablePlane = new Plane(Vector3.zero, Vector3.zero);
 
+#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
+	private Vector3 lastRenderScreenPos;
+	private Quaternion lastRenderScreenRot;
+#endif
+
 	void OnWillRenderObject()
 	{
 		if (_noVisuals) {
@@ -543,9 +550,32 @@ public class PortalBehaviour : UdonSharpBehaviour
 		if (internalCamera != screenCamera) {
 			#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
 				VRCShader.SetGlobalFloat(_Udon_UdonPortals_RenderOKID, 0);
+
+				virtualHead.SetPositionAndRotation(lastRenderScreenPos, lastRenderScreenRot);
+				if (inVR) {
+					dummyStereoCamera.aspect          = screenCamera.Aspect;
+					dummyStereoCamera.nearClipPlane   = screenCamera.NearClipPlane;
+					dummyStereoCamera.farClipPlane    = screenCamera.FarClipPlane;
+					dummyStereoCamera.fieldOfView     = screenCamera.FieldOfView;
+					VRCShader.SetGlobalMatrix(_Udon_UdonPortals_ScreenProjectionMatrixID, dummyStereoCamera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left));
+				}
+				else {
+					portalCameraL.aspect        = screenCamera.Aspect;
+					portalCameraL.nearClipPlane = screenCamera.NearClipPlane;
+					portalCameraL.farClipPlane  = screenCamera.FarClipPlane;
+					portalCameraL.fieldOfView   = screenCamera.FieldOfView;
+					portalCameraL.ResetProjectionMatrix();
+					VRCShader.SetGlobalMatrix(_Udon_UdonPortals_ScreenProjectionMatrixID, portalCameraL.projectionMatrix);
+				}
+				VRCShader.SetGlobalMatrix(_Udon_UdonPortals_ScreenViewMatrixID, portalCameraL.worldToCameraMatrix);
 			#endif
 			return;
 		}
+
+		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
+			lastRenderScreenPos = screenCamera.Position;
+			lastRenderScreenRot = screenCamera.Rotation;
+		#endif
 
 		int w = screenCamera.PixelWidth;
 		int h = screenCamera.PixelHeight;

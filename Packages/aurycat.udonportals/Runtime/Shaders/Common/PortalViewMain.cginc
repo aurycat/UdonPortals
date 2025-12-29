@@ -20,11 +20,8 @@ sampler2D _ViewTexL;
 sampler2D _ViewTexR;
 
 #if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-	// Note: These _VRChat uniforms are not set by ClientSim,
-	// so this doesn't work in the editor without extra steps.
-	uniform float3 _VRChatScreenCameraPos;
-	uniform float4 _VRChatScreenCameraRot;
 	uniform float4x4 _Udon_UdonPortals_ScreenProjectionMatrix;
+	uniform float4x4 _Udon_UdonPortals_ScreenViewMatrix;
 	uniform float _Udon_UdonPortals_RenderOK;
 
 	// Only render portal for normal screen camera.
@@ -32,40 +29,6 @@ sampler2D _ViewTexR;
 	bool CanRenderPortal()
 	{
 		return _Udon_UdonPortals_RenderOK == 1;
-	}
-
-	// Rotate quaternion 180 degrees on the Z axis.
-	// I don't understand why this is needed.
-	float4 RotZ180(float4 quat) {
-		return float4(quat.y, -quat.x, quat.w, -quat.z);
-	}
-
-	// https://gist.github.com/mattatz/40a91588d5fb38240403f198a938a593
-	float4x4 QuaternionToMatrix(float4 quat)
-	{
-		float4x4 m = float4x4(float4(0, 0, 0, 0), float4(0, 0, 0, 0), float4(0, 0, 0, 0), float4(0, 0, 0, 0));
-
-		float x = quat.x, y = quat.y, z = quat.z, w = quat.w;
-		float x2 = x + x, y2 = y + y, z2 = z + z;
-		float xx = x * x2, xy = x * y2, xz = x * z2;
-		float yy = y * y2, yz = y * z2, zz = z * z2;
-		float wx = w * x2, wy = w * y2, wz = w * z2;
-
-		m[0][0] = 1.0 - (yy + zz);
-		m[0][1] = xy - wz;
-		m[0][2] = xz + wy;
-
-		m[1][0] = xy + wz;
-		m[1][1] = 1.0 - (xx + zz);
-		m[1][2] = yz - wx;
-
-		m[2][0] = xz - wy;
-		m[2][1] = yz + wx;
-		m[2][2] = 1.0 - (xx + yy);
-
-		m[3][3] = 1.0;
-
-		return m;
 	}
 
 	float4 ViewTexScreenPos(float4 objVertex, float4 clipVertex)
@@ -76,15 +39,7 @@ sampler2D _ViewTexR;
 		// solid black! To do that, we need the screen camera's view and projection
 		// matrices.
 		if (!CanRenderPortal()) {
-			// Compute view matrix of screen camera
-			float4x4 invRot = transpose(QuaternionToMatrix(RotZ180(_VRChatScreenCameraRot)));
-			float4x4 invPos = float4x4(
-				1,  0,  0, -_VRChatScreenCameraPos.x,
-				0,  1,  0, -_VRChatScreenCameraPos.y,
-				0,  0,  1, -_VRChatScreenCameraPos.z,
-				0,  0,  0, 1
-			);
-			float4x4 screenV = mul(invRot, invPos); // inverse of mul(pos,rot)
+			float4x4 screenV = _Udon_UdonPortals_ScreenViewMatrix;
 
 			// Get projection matrix of screen camera
 			float4x4 screenP = _Udon_UdonPortals_ScreenProjectionMatrix;
