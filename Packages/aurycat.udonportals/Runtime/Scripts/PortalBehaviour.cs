@@ -495,7 +495,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	void OnWillRenderObject()
 	{
-		if (_noVisuals || !Utilities.IsValid(localPlayer)) {
+		if (_noVisuals) {
 			return;
 		}
 
