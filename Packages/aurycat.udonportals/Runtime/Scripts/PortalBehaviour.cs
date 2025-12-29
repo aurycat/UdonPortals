@@ -499,14 +499,43 @@ public class PortalBehaviour : UdonSharpBehaviour
 			return;
 		}
 
-		// Note this is not correct: OnWillRenderObject could be called for
-		// other cameras in the scene, e.g. the PhotoCamera. But there is
-		// no API yet to tell which camera is rendering.
-		//   https://feedback.vrchat.com/sdk-bug-reports/p/vrccamerasettings-property-to-tell-which-camera-is-currently-rendering
-		VRCCameraSettings renderingCamera = VRCCameraSettings.ScreenCamera;
+		// Although GetCurrentCamera lets us know what camera is rendering,
+		// there are multiple problems with rendering anything but the screen
+		// camera.
+		//  1. Due to a bug, the provided data for PhotoCamera is incorrect.
+		//     Things will look wrong rendering in the handheld photo camera
+		//     or drone, even if we exactly copy the camera settings it gives.
+		//     https://feedback.vrchat.com/bug-reports/p/vrccamerasettings-fov-wrong-for-photo-camera
+		//     The Canny claims FOV is wrong, but it seems like the issue is
+		//     more than just FOV... I'm not sure exactly what is wrong though.
+		//  2. GetCurrentCamera returns (null, null) when rendering the smoothed
+		//     VR camera. So, that one will always look wrong.
+		//  3. Even if all those issues were fixed, rendering different cameras
+		//     presents an issue with image resolution. Currently portals render
+		//     at the same resolution as the screen (times _textureResolution).
+		//     If we render with multiple cameras, we'd need to update the size
+		//     of the render textures multiple times per frame in order to
+		//     render each camera at the right resolution. Alternatively, there
+		//     could be a single "extra" render texture, at some fixed
+		//     resolution e.g. 1024x1024, which is used for all non-screen
+		//     cameras. That still means swapping out the target texture of the
+		//     portalCameraL, and the texture used by the portal material,
+		//     multiple times per frame. I haven't done much performance testing
+		//     of those options, but I assume neither of them are great for
+		//     performance!
+		//     A solution could be to use camera stacking & stencil-based portal
+		//     rendering, but that presents a number of other challenges in
+		//     VRChat and I don't know if it's feasible.
+		// For now, save some performance by not rendering portals for anything
+		// except the screen camera.
+		VRCCameraSettings screenCamera = VRCCameraSettings.ScreenCamera;
+		VRCCameraSettings.GetCurrentCamera(out VRCCameraSettings internalCamera, out Camera externalCamera);
+		if (internalCamera != screenCamera) {
+			return;
+		}
 
-		int w = renderingCamera.PixelWidth;
-		int h = renderingCamera.PixelHeight;
+		int w = screenCamera.PixelWidth;
+		int h = screenCamera.PixelHeight;
 		if (w != widthCache || h != heightCache || texturesNeedRefresh) {
 			widthCache = w;
 			heightCache = h;
@@ -522,7 +551,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		portalCameraRoot.SetPositionAndRotation(transform.position, transform.rotation);
 		// 2. Move the virtual head (child object of the root) to the position of the camera.
 		//    The virtual head is now in the "center" of the player's eyes.
-		virtualHead.SetPositionAndRotation(renderingCamera.Position, renderingCamera.Rotation);
+		virtualHead.SetPositionAndRotation(screenCamera.Position, screenCamera.Rotation);
 		// 3. In VR, shift the cameras to the position of each eye
 		if (inVR) {
 			Vector3 leftEyePos = VRCCameraSettings.GetEyePosition(Camera.StereoscopicEye.Left);
@@ -553,32 +582,32 @@ public class PortalBehaviour : UdonSharpBehaviour
 		portalCameraRoot.SetPositionAndRotation(partner.position, partner.rotation);
 
 		// Copy properties from the rendering camera
-		portalCameraL.aspect              = renderingCamera.Aspect;
-		portalCameraL.nearClipPlane       = renderingCamera.NearClipPlane;
-		portalCameraL.farClipPlane        = renderingCamera.FarClipPlane;
-		portalCameraL.fieldOfView         = renderingCamera.FieldOfView;
-		portalCameraL.allowHDR            = renderingCamera.AllowHDR;
-		portalCameraL.backgroundColor     = renderingCamera.BackgroundColor;
-		portalCameraL.clearFlags          = renderingCamera.ClearFlags;
-		portalCameraL.useOcclusionCulling = renderingCamera.UseOcclusionCulling;
+		portalCameraL.aspect              = screenCamera.Aspect;
+		portalCameraL.nearClipPlane       = screenCamera.NearClipPlane;
+		portalCameraL.farClipPlane        = screenCamera.FarClipPlane;
+		portalCameraL.fieldOfView         = screenCamera.FieldOfView;
+		portalCameraL.allowHDR            = screenCamera.AllowHDR;
+		portalCameraL.backgroundColor     = screenCamera.BackgroundColor;
+		portalCameraL.clearFlags          = screenCamera.ClearFlags;
+		portalCameraL.useOcclusionCulling = screenCamera.UseOcclusionCulling;
 
 		if (inVR) {
-			portalCameraR.aspect              = renderingCamera.Aspect;
-			portalCameraR.nearClipPlane       = renderingCamera.NearClipPlane;
-			portalCameraR.farClipPlane        = renderingCamera.FarClipPlane;
-			portalCameraR.fieldOfView         = renderingCamera.FieldOfView;
-			portalCameraR.allowHDR            = renderingCamera.AllowHDR;
-			portalCameraR.backgroundColor     = renderingCamera.BackgroundColor;
-			portalCameraR.clearFlags          = renderingCamera.ClearFlags;
-			portalCameraR.useOcclusionCulling = renderingCamera.UseOcclusionCulling;
+			portalCameraR.aspect              = screenCamera.Aspect;
+			portalCameraR.nearClipPlane       = screenCamera.NearClipPlane;
+			portalCameraR.farClipPlane        = screenCamera.FarClipPlane;
+			portalCameraR.fieldOfView         = screenCamera.FieldOfView;
+			portalCameraR.allowHDR            = screenCamera.AllowHDR;
+			portalCameraR.backgroundColor     = screenCamera.BackgroundColor;
+			portalCameraR.clearFlags          = screenCamera.ClearFlags;
+			portalCameraR.useOcclusionCulling = screenCamera.UseOcclusionCulling;
 
 			// Use the dummy camera to get the per-eye stereo projection matrices.
 			// Copy the properties from the rendering camera to the dummy camera so
 			// that the matrices are computed correctly.
-			dummyStereoCamera.aspect          = renderingCamera.Aspect;
-			dummyStereoCamera.nearClipPlane   = renderingCamera.NearClipPlane;
-			dummyStereoCamera.farClipPlane    = renderingCamera.FarClipPlane;
-			dummyStereoCamera.fieldOfView     = renderingCamera.FieldOfView;
+			dummyStereoCamera.aspect          = screenCamera.Aspect;
+			dummyStereoCamera.nearClipPlane   = screenCamera.NearClipPlane;
+			dummyStereoCamera.farClipPlane    = screenCamera.FarClipPlane;
+			dummyStereoCamera.fieldOfView     = screenCamera.FieldOfView;
 			portalCameraL.projectionMatrix    = dummyStereoCamera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
 			portalCameraR.projectionMatrix    = dummyStereoCamera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right);
 		}
