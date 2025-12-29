@@ -102,7 +102,7 @@ Shader "Aurycat/PortalView"
 		Pass
 		{
 			Cull [_Cull]
-			ZWrite On
+			ZWrite Off
 			ZClip False
 
 			Stencil {
