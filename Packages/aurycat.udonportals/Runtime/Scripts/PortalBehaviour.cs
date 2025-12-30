@@ -204,11 +204,13 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private Renderer _renderer; // Use '_renderer' name to avoid warning about conflict with 'Component.renderer'.
 	                            // The warning says to use the 'new' keyword, but adding it causes a different
 	                            // warning saying that 'new' isn't necessary. So uh. Just give it a different name.
+	private Material material;
 	private Collider trigger;
 
 	// Texture size at the previous frame
 	private int widthCache = 0;
 	private int heightCache = 0;
+	private bool texturesNeedRefresh;
 
 	// Properties to keep track of the player while they're within the
 	// portal trigger:
@@ -232,13 +234,16 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private bool _noVisuals;
 	private bool _noPhysics;
 
-	private bool texturesNeedRefresh;
-
+	// Shader property IDs from VRCShader.PropertyToID
+	private bool propIDsInited;
+	private int propID_ViewTexL;
+	private int propID_ViewTexR;
 #if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-	private int _Udon_UdonPortals_ScreenProjectionMatrixID;
-	private int _Udon_UdonPortals_ScreenViewMatrixID;
-	private int _Udon_UdonPortals_RenderOKID;
+	private int propID_ScreenProjectionMatrix;
+	private int propID_ScreenViewMatrix;
+	private int propID_RenderOK;
 #endif
+
 
 	void OnEnable()
 	{
@@ -269,12 +274,13 @@ public class PortalBehaviour : UdonSharpBehaviour
 		partnerPortalBehaviour = partner.GetComponent<PortalBehaviour>();
 
 		if (!_noVisuals) {
+			_InitShaderPropertyIDs();
 			_renderer = GetComponent<Renderer>();
 			if (_renderer != null) {
-				Material mat = _renderer.material;
-				if (mat != null) {
-					if(!mat.HasProperty("_ViewTexL") || !mat.HasProperty("_ViewTexR")) {
-						Debug.LogError($"Portal '{name}' is set to material '{mat.name}' which does not have the _ViewTexL or _ViewTexR properties.");
+				material = _renderer.material;
+				if (material != null) {
+					if(!material.HasProperty(propID_ViewTexL) || !material.HasProperty(propID_ViewTexR)) {
+						Debug.LogError($"Portal '{name}' is set to material '{material.name}' which does not have the _ViewTexL or _ViewTexR properties.");
 						return;
 					}
 				} else {
@@ -359,10 +365,13 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 			texturesNeedRefresh = true;
 
-			_renderer.material.SetTexture("_ViewTexL", viewTexL);
+			#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
+				material.SetFloat(propID_RenderOK, 0);
+			#endif
+			material.SetTexture(propID_ViewTexL, viewTexL);
 
 			if (inVR) {
-				_renderer.material.SetTexture("_ViewTexR", viewTexR);
+				material.SetTexture(propID_ViewTexR, viewTexR);
 				dummyStereoCamera.stereoTargetEye = StereoTargetEyeMask.Both;
 			}
 		}
@@ -375,12 +384,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 		prevInFront = false;
 		trackingHeadInTrigger = false;
 		isHoloport = false;
-
-		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-			_Udon_UdonPortals_ScreenProjectionMatrixID = VRCShader.PropertyToID("_Udon_UdonPortals_ScreenProjectionMatrix");
-			_Udon_UdonPortals_ScreenViewMatrixID = VRCShader.PropertyToID("_Udon_UdonPortals_ScreenViewMatrix");
-			_Udon_UdonPortals_RenderOKID = VRCShader.PropertyToID("_Udon_UdonPortals_RenderOK");
-		#endif
 
 	} /* OnEnable */
 
@@ -447,30 +450,31 @@ public class PortalBehaviour : UdonSharpBehaviour
 	{
 		if (_noVisuals) {
 			return;
-		} else if (_renderer == null) {
-			_renderer = GetComponent<Renderer>();
-			if (_renderer != null) {
-				_renderer.material = mat;
-			}
-			return;
 		} else if (mat == null) {
-			_renderer.material = null;
-			return;
-		} else if (!mat.HasProperty("_ViewTexL") || !mat.HasProperty("_ViewTexR")) {
-			Debug.LogError($"Attempt to change portal '{name}' material {mat.name} which does not have the _ViewTexL or _ViewTexR properties.");
+			Debug.LogError($"Attempt to change portal '{name}' material to null.");
 			return;
 		}
 
-		_renderer.material = mat;
-		mat = _renderer.material;
+		_InitShaderPropertyIDs();
 
-		if(mat.HasProperty("_ViewTexL") && mat.HasProperty("_ViewTexR")) {
-			mat.SetTexture("_ViewTexL", viewTexL);
-			if (inVR) {
-				mat.SetTexture("_ViewTexR", viewTexR);
+		if (!mat.HasProperty(propID_ViewTexL) || !mat.HasProperty(propID_ViewTexR)) {
+			Debug.LogError($"Attempt to change portal '{name}' material to '{mat.name}' which does not have the _ViewTexL or _ViewTexR properties.");
+			return;
+		} else if (_renderer == null) {
+			// The portal might not have been enabled yet
+			_renderer = GetComponent<Renderer>();
+			if (_renderer == null) {
+				Debug.LogError($"Attempt to change portal '{name}' material to '{mat.name}', but portal has no Renderer.");
+				return;
 			}
-		} else {
-			Debug.LogError($"Portal '{name}' material changed to one that does not have the _ViewTexL or _ViewTexR properties.");
+		}
+
+		_renderer.material = mat;
+		material = _renderer.material;
+
+		material.SetTexture(propID_ViewTexL, viewTexL);
+		if (inVR) {
+			material.SetTexture(propID_ViewTexR, viewTexR);
 		}
 	}
 
@@ -503,11 +507,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private Vector3 ocpNormal = Vector3.zero;
 	private Vector3 ocpPos = Vector3.zero;
 	private Plane ocpDisablePlane = new Plane(Vector3.zero, Vector3.zero);
-
-#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-	private Vector3 lastRenderScreenPos;
-	private Quaternion lastRenderScreenRot;
-#endif
 
 	void OnWillRenderObject()
 	{
@@ -548,33 +547,10 @@ public class PortalBehaviour : UdonSharpBehaviour
 		VRCCameraSettings.GetCurrentCamera(out VRCCameraSettings internalCamera, out Camera externalCamera);
 		if (internalCamera != screenCamera) {
 			#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-				VRCShader.SetGlobalFloat(_Udon_UdonPortals_RenderOKID, 0);
-
-				virtualHead.SetPositionAndRotation(lastRenderScreenPos, lastRenderScreenRot);
-				if (inVR) {
-					dummyStereoCamera.aspect          = screenCamera.Aspect;
-					dummyStereoCamera.nearClipPlane   = screenCamera.NearClipPlane;
-					dummyStereoCamera.farClipPlane    = screenCamera.FarClipPlane;
-					dummyStereoCamera.fieldOfView     = screenCamera.FieldOfView;
-					VRCShader.SetGlobalMatrix(_Udon_UdonPortals_ScreenProjectionMatrixID, dummyStereoCamera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left));
-				}
-				else {
-					portalCameraL.aspect        = screenCamera.Aspect;
-					portalCameraL.nearClipPlane = screenCamera.NearClipPlane;
-					portalCameraL.farClipPlane  = screenCamera.FarClipPlane;
-					portalCameraL.fieldOfView   = screenCamera.FieldOfView;
-					portalCameraL.ResetProjectionMatrix();
-					VRCShader.SetGlobalMatrix(_Udon_UdonPortals_ScreenProjectionMatrixID, portalCameraL.projectionMatrix);
-				}
-				VRCShader.SetGlobalMatrix(_Udon_UdonPortals_ScreenViewMatrixID, portalCameraL.worldToCameraMatrix);
+				material.SetFloat(propID_RenderOK, 0);
 			#endif
 			return;
 		}
-
-		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-			lastRenderScreenPos = screenCamera.Position;
-			lastRenderScreenRot = screenCamera.Rotation;
-		#endif
 
 		int w = screenCamera.PixelWidth;
 		int h = screenCamera.PixelHeight;
@@ -614,6 +590,18 @@ public class PortalBehaviour : UdonSharpBehaviour
 				rightEyePos,
 				VRCCameraSettings.GetEyeRotation(Camera.StereoscopicEye.Right));
 		}
+		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
+			// 3b. portalCameraL is now in the same position as, and so has the same
+			//     view matrix as, the (left eye of the) main screen camera. Capture
+			//     that view matrix and pass it to the shader. We only render the
+			//     portal once, for the main screen camera, so if any other cameras
+			//     (e.g. handheld photo camera, drone camera, stabilized camera) view
+			//     the portal, the shader can use this view matrix from the time of
+			//     rendering to approximate the portal surface for those other cameras.
+			//     Also, only the left eye view is needed since we assume all the other
+			//     cameras are not VR.
+			material.SetMatrix(propID_ScreenViewMatrix, portalCameraL.worldToCameraMatrix);
+		#endif
 		// 4. Rotate the virtual head 180 degrees around the current portal,
 		//    which accounts for the fact that the virtual head looks "out of"
 		//    the partner portal. So we're looking from behind the portal now.
@@ -657,6 +645,13 @@ public class PortalBehaviour : UdonSharpBehaviour
 			portalCameraL.ResetProjectionMatrix();
 		}
 
+		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
+			// Capture projection matrix used to render the portal and pass it to
+			// the shader. See above where the view matrix is passed to the shader
+			// for more info.
+			material.SetMatrix(propID_ScreenProjectionMatrix, portalCameraL.projectionMatrix);
+		#endif
+
 		if (_useObliqueProjection) {
 			// Setup an oblique projection matrix for the portal cameras.
 			// In VR, do this separately for each eye.
@@ -691,7 +686,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		}
 
 		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-			VRCShader.SetGlobalFloat(_Udon_UdonPortals_RenderOKID, 1);
+			material.SetFloat(propID_RenderOK, 1);
 		#endif
 
 	} /* OnWillRenderObject */
@@ -709,9 +704,13 @@ public class PortalBehaviour : UdonSharpBehaviour
 			return;
 		} else if (inVR) {
 			if (!Utilities.IsValid(player) || player.isLocal) {
-				if (_renderer != null && _renderer.material != null) {
-					_renderer.material.SetTexture("_ViewTexL", null);
-					_renderer.material.SetTexture("_ViewTexR", null);
+				if (material != null) {
+					#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
+						material.SetFloat(propID_RenderOK, 0);
+					#else
+						material.SetTexture(propID_ViewTexL, null);
+						material.SetTexture(propID_ViewTexR, null);
+					#endif
 				}
 			}
 		}
@@ -1115,6 +1114,21 @@ public class PortalBehaviour : UdonSharpBehaviour
 		// Need to set to null first for the change to apply correctly, dunno why
 		cam.targetTexture = null;
 		cam.targetTexture = tex;
+	}
+
+	private void _InitShaderPropertyIDs()
+	{
+		if (propIDsInited) {
+			return;
+		}
+		propID_ViewTexL = VRCShader.PropertyToID("_ViewTexL");
+		propID_ViewTexR = VRCShader.PropertyToID("_ViewTexR");
+		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
+			propID_ScreenProjectionMatrix = VRCShader.PropertyToID("_ScreenProjectionMatrix");
+			propID_ScreenViewMatrix = VRCShader.PropertyToID("_ScreenViewMatrix");
+			propID_RenderOK = VRCShader.PropertyToID("_RenderOK");
+		#endif
+		propIDsInited = true;
 	}
 
 	// Given position/normal of the plane, calculates plane in camera space.

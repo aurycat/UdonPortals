@@ -20,15 +20,15 @@ sampler2D _ViewTexL;
 sampler2D _ViewTexR;
 
 #if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-	uniform float4x4 _Udon_UdonPortals_ScreenProjectionMatrix;
-	uniform float4x4 _Udon_UdonPortals_ScreenViewMatrix;
-	uniform float _Udon_UdonPortals_RenderOK;
+	uniform float4x4 _ScreenProjectionMatrix;
+	uniform float4x4 _ScreenViewMatrix;
+	uniform float _RenderOK;
 
 	// Only render portal for normal screen camera.
 	// See PortalBehaviour.cs OnWillRenderObject for explanation
 	bool CanRenderPortal()
 	{
-		return _Udon_UdonPortals_RenderOK == 1;
+		return _RenderOK;
 	}
 
 	float4 ViewTexScreenPos(float4 objVertex, float4 clipVertex)
@@ -39,12 +39,9 @@ sampler2D _ViewTexR;
 		// solid black! To do that, we need the screen camera's view and projection
 		// matrices.
 		if (!CanRenderPortal()) {
-			float4x4 screenV = _Udon_UdonPortals_ScreenViewMatrix;
-
-			// Get projection matrix of screen camera
-			float4x4 screenP = _Udon_UdonPortals_ScreenProjectionMatrix;
+			float4x4 proj = _ScreenProjectionMatrix;
 			// This replicates the behavior of GL.GetGPUProjectionMatrix(p, true).
-			// Needed because _Udon_UdonPortals_ScreenProjectionMatrix comes
+			// Needed because _ScreenProjectionMatrix comes
 			// directly from Camera.projectionMatrix, which is always in OpenGL
 			// projection matrix format.
 			// This conversion is probably wrong at least somewhat, but
@@ -52,11 +49,11 @@ sampler2D _ViewTexR;
 			// GetGPUProjectionMatrix does in all cases; I created this
 			// conversion code by observing GetGPUProjectionMatrix's behavior.
 			#if UNITY_REVERSED_Z
-				screenP[1] *= -1;
-				screenP[2] *= screenP[2]*-0.5 + screenP[3]*0.5;
+				proj[1] *= -1;
+				proj[2] *= proj[2]*-0.5 + proj[3]*0.5;
 			#endif
 
-			clipVertex = mul(screenP, mul(screenV, mul(UNITY_MATRIX_M, objVertex)));
+			clipVertex = mul(proj, mul(_ScreenViewMatrix, mul(UNITY_MATRIX_M, objVertex)));
 		}
 
 		return ComputeNonStereoScreenPos(clipVertex);
@@ -102,7 +99,8 @@ half4 frag(v2f i) : SV_Target
 	if (!CanRenderPortal()) {
 		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
 			float2 pos = i.screenPos / i.screenPos.w;
-			if (any(pos < 0 || pos > 1)) {
+			// Render black if out of range, or if rendering opposite direction (w < 0)
+			if (any(pos < 0 || pos > 1) || i.screenPos.w < 0) {
 				return half4(0,0,0,1);
 			}
 			return tex2D(_ViewTexL, pos);
