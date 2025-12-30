@@ -33,7 +33,6 @@ using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon;
 using System;
-using UnityEditor;
 using VRC.SDK3.Components;
 using VRC.SDK3.Rendering;
 using JetBrains.Annotations;
