@@ -724,15 +724,21 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	public override void OnPlayerTriggerStay(VRCPlayerApi player)
 	{
-		if (!player.isLocal || !Utilities.IsValid(localPlayer)) {
+		if (!Utilities.IsValid(player)) {
 			return;
 		}
-		// 'trackingHeadInTrigger' is used for rendering when _useObliqueProjection is on
-		if (_noPhysics && !_useObliqueProjection) {
+		if (!player.isLocal) {
 			return;
 		}
 
-		VRCPlayerApi.TrackingData trackingHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
+		// 'trackingHeadInTrigger' is used for rendering when _useObliqueProjection is on
+		if (_noPhysics) {
+			if (!_useObliqueProjection) {
+				return;
+			}
+		}
+
+		VRCPlayerApi.TrackingData trackingHead = player.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
 
 		// ClosestPoint is the only way to manually check if a point is inside a collider.
 		trackingHeadInTrigger = (trigger.ClosestPoint(trackingHead.position) == trackingHead.position);
@@ -749,7 +755,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 			// viewpoint head (tracking data head). Teleporting behavior needs to
 			// be adjusted in that case. Thanks to Superbstingray for coming up with
 			// this Holoport detection method and the teleporting fixes for it!
-			Vector3 holoportHeadPos = localPlayer.GetBonePosition(HumanBodyBones.Head);
+			Vector3 holoportHeadPos = player.GetBonePosition(HumanBodyBones.Head);
 			if (holoportHeadPos != Vector3.zero) { // Zero if no head bone
 				isHoloport = Vector3.Distance(trackingHead.position, holoportHeadPos) > 1;
 			}
@@ -788,14 +794,16 @@ public class PortalBehaviour : UdonSharpBehaviour
 			Plane p = new Plane(-transform.forward, transform.position - (transform.forward*teleportPlaneOffset));
 			bool inFront = p.GetSide(playerHeadPos);
 
-			if (prevInFront && !inFront) {
-				// Player crossed from front to back, teleport them
+			if (prevInFront) {
+				if (!inFront) {
+					// Player crossed from front to back, teleport them
 
-				// Calling TeleportTo from a FixedUpdate event like OnPlayerTriggerStay
-				// causes some "ghosting" -- it appears like you can see yourself
-				// through the portal one frame in advance, or something like that.
-				// Delaying until Update makes it go away.
-				SendCustomEventDelayedFrames(nameof(_TeleportPlayer), 0, VRC.Udon.Common.Enums.EventTiming.Update);
+					// Calling TeleportTo from a FixedUpdate event like OnPlayerTriggerStay
+					// causes some "ghosting" -- it appears like you can see yourself
+					// through the portal one frame in advance, or something like that.
+					// Delaying until Update makes it go away.
+					SendCustomEventDelayedFrames(nameof(_TeleportPlayer), 0, VRC.Udon.Common.Enums.EventTiming.Update);
+				}
 			}
 			prevInFront = inFront;
 		}
@@ -992,24 +1000,31 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	public void OnTriggerExit(Collider collider)
 	{
-		if (prevBody != null && prevBody == collider.attachedRigidbody) {
-			prevBody = null;
+		if (prevBody != null) {
+			if (prevBody == collider.attachedRigidbody) {
+				prevBody = null;
+			}
 		}
 	}
 
 	public void OnTriggerStay(Collider collider)
 	{
-		if (_noPhysics || !Utilities.IsValid(localPlayer)) {
+		if (_noPhysics) {
 			return;
 		}
 
 		Rigidbody body = collider.attachedRigidbody;
-		if (body == null || body.isKinematic) {
+		if (body == null) {
+			return;
+		}
+		if (body.isKinematic) {
 			return;
 		}
 
-		if (prevBody != null && prevBody != body) {
-			return;
+		if (prevBody != null) {
+			if (prevBody != body) {
+				return;
+			}
 		}
 
 		// Only the object owner should update the object transform. If we're
