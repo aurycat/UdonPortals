@@ -1,10 +1,11 @@
-// This is the main script that controls the portals. All the public properties
-// and functions have document comments above them. Please read them for more
-// detail.
+// This is the main script that controls the portals.
 //
 // If you make improvements to this project that you think would be useful for
-// everyone, please make a pull request on this project's GitLab page! Thanks!
-// https://gitlab.com/aurycat/UdonPortals
+// everyone, please make a pull request on this project's GitHub page! Thanks!
+// https://github.com/aurycat/UdonPortals
+//
+// Documentation:
+// https://github.com/aurycat/UdonPortals/wiki
 //
 // Author: aurycat
 // License: MIT
