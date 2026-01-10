@@ -1272,7 +1272,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 	// that usually if the partner portal is active and using activatePartnerOn-
 	// -Teleport, this portal will be ready to activate, hence its parent should
 	// be active already.
-	public void Preload()
+	[PublicAPI] public void Preload()
 	{
 		#if !UDONPORTALS_DISABLE_PARTNER_PRELOAD
 			// The partner is who called this function, so it's already active and
