@@ -487,20 +487,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 		texturesNeedRefresh = true;
 	}
 
-	/**
-	 * This should be called if the partner property is changed while
-	 * the portal is active.
-	 */
-	[PublicAPI]
-	public void RefreshPartner()
-	{
-		if (partner == null) {
-			Debug.LogError($"Deactivating portal '{name}' because its partner transform was changed to null.");
-			return;
-		}
-		partnerPortalBehaviour = partner.GetComponent<PortalBehaviour>();
-	}
-
 	// Local vars within OnWillRenderObject, just placed here to avoid
 	// initializing them every frame when not doing oblique projection
 	private Vector3 ocpNormal = Vector3.zero;
@@ -1173,6 +1159,24 @@ public class PortalBehaviour : UdonSharpBehaviour
 		}
 		_textureResolution = val;
 		texturesNeedRefresh = true;
+	}
+
+	// `partner` can't be changed to a property with a FieldChangeCallback without
+	// breaking backwards compatability for either graphs or U#. So use this hack
+	// to check for changes to the partner variable. The on-change event is really
+	// just a public event called `_onVarChange_<variable name>`!
+	public void _onVarChange_partner()
+	{
+		if (enabled) {
+			if (gameObject.activeInHierarchy) {
+				if (partner == null) {
+					Debug.LogError($"Partner of active portal '{name}' was changed to null! Deactivating self.");
+					gameObject.SetActive(false);
+					return;
+				}
+				partnerPortalBehaviour = partner.GetComponent<PortalBehaviour>();
+			}
+		}
 	}
 
 	// Called by the partner portal (if the partner is a PortalBehaviour)
