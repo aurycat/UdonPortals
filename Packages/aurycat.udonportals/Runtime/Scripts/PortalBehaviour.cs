@@ -178,6 +178,19 @@ public class PortalBehaviour : UdonSharpBehaviour
 	// transform, if such a component exists. Otherwise, null.
 	private PortalBehaviour partnerPortalBehaviour;
 
+// Don't wrap this in #if !UDONPORTALS_DISABLE_PARTNER_PRELOAD so the U# asset
+// file doesn't change when the macro is set. But disable "assigned but its value
+// is never used" warning, emitted when UDONPORTALS_DISABLE_PARTNER_PRELOAD is set. 
+#pragma warning disable 0414
+	// Initially true, set false after preloading once. Avoids unnecessary
+	// calls out to the partner portal. Reset to true if `partner` is changed.
+	private bool shouldPreloadPartner = true;
+#pragma warning restore 0414
+
+	// Set true if OnEnable has ever been called. Indicates preloading is no
+	// longer needed.
+	private bool everEnabled;
+
 	// This is the Transform of the "virtual" head, i.e. the player's head
 	// relative to the current portal's front-face, transformed to be relative
 	// to the opposite portal's back-face.
@@ -247,6 +260,22 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	void OnEnable()
 	{
+		everEnabled = true;
+
+		// Udon bug: The first time a GameObject is activated, there's a few
+		// frames of delay between the SetActive(true) and OnEnable being called.
+		// That's already annoying, but even worse, if SetActive(false) is then
+		// called before OnEnable is run, OnEnable will still run but OnDisable
+		// is not run! That would be bad for the portal because the stuff init'd
+		// in OnEnable won't be cleaned up in OnDisable. Luckily there's a work-
+		// -around, checking !gameObject.activeInHierarchy, which will be false
+		// in this situaton. (It should never be false in OnEnable in normal Unity.)
+		// The Preload() function specifically causes this scenario, so we need
+		// to account for it.
+		if (!gameObject.activeInHierarchy) {
+			return;
+		}
+
 		_noVisuals = (operatingMode == PortalBehaviourMode.PhysicsOnly);
 		_noPhysics = (operatingMode == PortalBehaviourMode.VisualsOnly);
 
@@ -384,6 +413,18 @@ public class PortalBehaviour : UdonSharpBehaviour
 		prevInFront = false;
 		trackingHeadInTrigger = false;
 		isHoloport = false;
+
+		#if !UDONPORTALS_DISABLE_PARTNER_PRELOAD
+			// Nesting if statements compiles to fewer instructions than using &&
+			if (activatePartnerOnTeleport) {
+				if (shouldPreloadPartner) {
+					shouldPreloadPartner = false;
+					if (partnerPortalBehaviour != null) {
+						partnerPortalBehaviour.Preload();
+					}
+				}
+			}
+		#endif
 
 	} /* OnEnable */
 
@@ -1178,6 +1219,11 @@ public class PortalBehaviour : UdonSharpBehaviour
 				partnerPortalBehaviour = partner.GetComponent<PortalBehaviour>();
 			}
 		}
+		#if !UDONPORTALS_DISABLE_PARTNER_PRELOAD
+			// Reset this flag so that the new partner will be preloaded next time
+			// this portal is enabled.
+			shouldPreloadPartner = true;
+		#endif
 	}
 
 	// Called by the partner portal (if the partner is a PortalBehaviour)
@@ -1208,6 +1254,43 @@ public class PortalBehaviour : UdonSharpBehaviour
 			callbackScript.SetProgramVariable("targetPortal", this);
 			callbackScript.SetProgramVariable("teleportedObject", body);
 			callbackScript.SendCustomEvent("_PortalWillReceiveObject");
+		}
+	}
+
+	// Called by the partner portal when it becomes active, if the partner uses
+	// activatePartnerOnTeleport. The first time an object becomes active in the
+	// scene, it can take a few frames to start rendering. With activatePartner-
+	// -OnTeleport, it might be that the first time the portal becomes active is
+	// right when the player is teleported to it. That means for a few frames
+	// the portal won't be rendered -- i.e., ugly flicker!
+	//
+	// Preloading activates and then immediately deactivates the portal, which
+	// is enough to get Unity to do whatever processing it needs to do, and then
+	// the next time the portal is activated it starts rendering the same frame.
+	//
+	// Unfortunately this only works if the parent object is active too. I assume
+	// that usually if the partner portal is active and using activatePartnerOn-
+	// -Teleport, this portal will be ready to activate, hence its parent should
+	// be active already.
+	public void Preload()
+	{
+		#if !UDONPORTALS_DISABLE_PARTNER_PRELOAD
+			// The partner is who called this function, so it's already active and
+			// doesn't need to be preloaded.
+			shouldPreloadPartner = false;
+		#endif
+
+		// Nesting if statements compiles to fewer instructions than using &&
+		// Plus with &&, the unary negations get compiled as EXTERNs! D:
+		if (!everEnabled) {
+			if (!gameObject.activeSelf) {
+				// Preloading is to avoid flicker on teleport, so it's only
+				// necessary when using VisualsAndPhysics
+				if (operatingMode == PortalBehaviourMode.VisualsAndPhysics) {
+					gameObject.SetActive(true);
+					gameObject.SetActive(false);
+				}
+			}
 		}
 	}
 }
