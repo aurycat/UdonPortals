@@ -853,6 +853,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		VRCPlayerApi.TrackingData trackingHead = localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
 
 		// Use AvatarRoot in VR due to a few bugs with using Origin-based teleporting.
+		// https://feedback.vrchat.com/udon/p/teleportto-alignroomwithspawnpoint-has-problems-if-theres-a-wall-between-the-des
 		// Using AvatarRoot also means the TeleportTo needs to use AlignPlayerWithSpawnPoint
 		// instead of AlignRoomWithSpawnPoint. 
 		VRCPlayerApi.TrackingData trackingRoot =
