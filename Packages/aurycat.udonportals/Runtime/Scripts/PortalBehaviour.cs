@@ -96,7 +96,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	[Tooltip("When enabled, the partner portal/GameObject is automatically activated when the player is teleported to it. See 'Performance and Optimization' wiki page on GitHub for more info.")]
 	[PublicAPI]
-	public bool activatePartnerOnTeleport = true;
+	public bool activatePartnerOnTeleport = false;
 
 	[Tooltip("When enabled, this portal will be deactivated after the player passes through it. See 'Performance and Optimization' wiki page on GitHub for more info.")]
 	[PublicAPI]
@@ -257,6 +257,11 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private int propID_RenderOK;
 #endif
 
+	void Reset()
+	{
+		// Added in v2.1 -- disabled by default for backwards compatability, but enable it for new portals.
+		activatePartnerOnTeleport = true;
+	}
 
 	void OnEnable()
 	{
