@@ -750,6 +750,13 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	public override void OnPlayerTriggerExit(VRCPlayerApi player)
 	{
+		if (!Utilities.IsValid(player)) {
+			return;
+		}
+		if (!player.isLocal) {
+			return;
+		}
+		
 		prevInFront = false;
 		trackingHeadInTrigger = false;
 		isHoloport = false;
