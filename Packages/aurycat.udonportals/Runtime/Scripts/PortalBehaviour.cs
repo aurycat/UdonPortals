@@ -110,10 +110,10 @@ public class PortalBehaviour : UdonSharpBehaviour
 	//
 	// ========================================================================
 
-	[Tooltip("The render texture used for the left eye in VR, or the entire view in Desktop.")]
+	[Tooltip("The render texture used for the left eye in VR, or the entire view in Desktop. Must be unique per portal. Automatically created at runtime if unset.")]
 	[PublicAPI]
 	public RenderTexture viewTexL;
-	[Tooltip("The render texture used for the right eye in VR.")]
+	[Tooltip("The render texture used for the right eye in VR. Must be unique per portal. If in VR, automatically created at runtime if unset.")]
 	[PublicAPI]
 	public RenderTexture viewTexR;
 
@@ -257,11 +257,19 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private int propID_RenderOK;
 #endif
 
+
+#if UNITY_EDITOR
+	// For the v2.0 -> v2.1 render texture warning.
+	// Set to false by the editor script once viewTexL and viewTexR have been cleared.
+	[HideInInspector] public bool hasPreV21RenderTextures = true;
+
 	void Reset()
 	{
-		// Added in v2.1 -- disabled by default for backwards compatability, but enable it for new portals.
-		activatePartnerOnTeleport = true;
+		activatePartnerOnTeleport = true; // Added in v2.1 -- disabled by default for backwards compatability, but enable it for new portals.
+		hasPreV21RenderTextures = false; // Set to false for new portals
 	}
+#endif
+
 
 	void OnEnable()
 	{
@@ -293,12 +301,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 			return;
 		} else if (partner == null) {
 			Debug.LogError($"Portal '{name}' does not have a partner transform set.");
-			return;
-		} else if (!_noVisuals && (viewTexL == null || viewTexR == null)) {
-			Debug.LogError($"Portal '{name}' does not have one or both of its View Tex properties set. Please set them to two separate RenderTextures, unique to this portal.");
-			return;
-		} else if (!_noVisuals && (viewTexL == viewTexR)) {
-			Debug.LogError($"Portal '{name}' has the same texture set for both View Tex L and View Tex R. Please set them to two separate RenderTextures, unique to this portal.");
 			return;
 		} else if (_textureResolution <= 0 || _textureResolution > 1) {
 			Debug.LogError($"Portal '{name}' has texture resolution set to an illegal value ({_textureResolution}).");
@@ -385,6 +387,22 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 			portalCameraR.gameObject.SetActive(inVR);
 
+
+			/*
+			 * Setup textures
+			 */
+
+			if (viewTexL == null) {
+				viewTexL = new RenderTexture(256, 256, 24, RenderTextureFormat.ARGBHalf, 1);
+				viewTexL.name = name + "-L";
+			}
+			if (inVR && (viewTexR == null || viewTexR == viewTexL)) {
+				viewTexR = new RenderTexture(viewTexL);
+				viewTexR.name = name + "-R";
+			}
+
+			texturesNeedRefresh = true;
+
 			/*
 			 * Configure portal cameras.
 			 */
@@ -396,8 +414,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 			_ResetCamera(dummyStereoCamera);
 
 			_UpdateLayerMask(_layerMask);
-
-			texturesNeedRefresh = true;
 
 			#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
 				material.SetFloat(propID_RenderOK, 0);

@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections;
 using UnityEditor;
+using System.Collections.Generic;
 //using UdonSharpEditor;
 
 [CustomEditor(typeof(PortalBehaviour))]
@@ -30,6 +31,7 @@ public class PortalBehaviourEditor : Editor
 	SerializedProperty portalCameraPrefabProp;
 	SerializedProperty portalCameraRootProp;
 
+	GUIContent renderTextureDocs;
 	GUIContent useObliqueProjectionDocs;
 
 	static bool showAdvanced;
@@ -58,6 +60,7 @@ public class PortalBehaviourEditor : Editor
 		portalCameraPrefabProp = serializedObject.FindProperty("portalCameraPrefab");
 		portalCameraRootProp = serializedObject.FindProperty("portalCameraRoot");
 
+		renderTextureDocs = new GUIContent("View Tex Documentation");
 		useObliqueProjectionDocs = new GUIContent("Oblique Projection Documentation");
 	}
 
@@ -80,8 +83,59 @@ public class PortalBehaviourEditor : Editor
 				} else {
 					GUILayout.Space(5);
 					EditorGUILayout.HelpBox("Missing reference to prefab asset PortalCamera. The asset cannot be found. Try reimporting the UdonPortals package?", MessageType.Error);
-					GUILayout.Space(15);
+					GUILayout.Space(10);
+					GUILayout.BeginVertical();
+					EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
+					GUILayout.EndVertical();
 					break;
+				}
+			}
+		}
+
+		bool rtwarning = false;
+		foreach (PortalBehaviour p in targets) {
+			if (p.hasPreV21RenderTextures) {
+				if (p.viewTexL == null && p.viewTexR == null) {
+					p.hasPreV21RenderTextures = false;
+				}
+				else if (!rtwarning) {
+					rtwarning = true;
+					GUILayout.Space(5);
+					EditorGUILayout.HelpBox("Starting with UdonPortals v2.1, a portal's render textures are automatically generated at runtime. Unless you need a customized texture format, please clear the 'View Tex L' and 'View Tex R' fields in the Advanced section below. After clearing the fields, you may delete the RenderTexture assets from your project.", MessageType.Warning);
+					if (GUILayout.Button("Automatically clear the fields for me")) {
+						Undo.RegisterCompleteObjectUndo(targets, "Clear render textures on portal");
+						foreach (PortalBehaviour p2 in targets) {
+							p2.viewTexL = null;
+							p2.viewTexR = null;
+							p2.hasPreV21RenderTextures = false;
+						}
+					}
+					if (GUILayout.Button("Automatically clear fields & delete the assets (no undo)")) {
+						var paths = new List<string>();
+						var outFailedPaths = new List<string>();
+						foreach (PortalBehaviour p2 in targets) {
+							if (p2.viewTexL != null) {
+								paths.Add(AssetDatabase.GetAssetPath(p2.viewTexL));
+							}
+							if (p2.viewTexR != null) {
+								paths.Add(AssetDatabase.GetAssetPath(p2.viewTexR));
+							}
+							p2.viewTexL = null;
+							p2.viewTexR = null;
+							p2.hasPreV21RenderTextures = false;
+						}
+						AssetDatabase.MoveAssetsToTrash(paths.ToArray(), outFailedPaths);
+					}
+					if (GUILayout.Button("Silence warning")) {
+						Undo.RegisterCompleteObjectUndo(targets, "Silence render texture warning");
+						foreach (PortalBehaviour p2 in targets) {
+							p2.hasPreV21RenderTextures = false;
+						}
+					}
+					GUILayout.Space(10);
+					GUILayout.BeginVertical();
+					EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
+					GUILayout.EndVertical();
 				}
 			}
 		}
@@ -91,20 +145,6 @@ public class PortalBehaviourEditor : Editor
 		EditorGUILayout.PropertyField(operatingModeProp);
 
 		GUILayout.Space(10);
-
-		if (serializedObject.isEditingMultipleObjects || operatingModeProp.enumValueIndex != (int)PortalBehaviourMode.PhysicsOnly) {
-			foreach (PortalBehaviour p in targets) {
-				if (p.viewTexL == null || p.viewTexR == null) {
-					GUILayout.Space(5);
-					EditorGUILayout.HelpBox("This portal is missing one or both of its Render Textures. Each portal must have two unique Render Texture assets assigned to it. Would you like to create them automatically? You can also set them manually in the 'Advanced' dropdown below.", MessageType.Error);
-					if (GUILayout.Button("Generate Render Textures")) {
-						GenerateRenderTextures();
-					}
-					GUILayout.Space(15);
-					break;
-				}
-			}
-		}
 
 		EditorGUILayout.PropertyField(partnerProp,
 			new GUIContent("Partner Portal"));
@@ -164,13 +204,17 @@ public class PortalBehaviourEditor : Editor
 		showAdvanced = EditorGUILayout.Foldout(showAdvanced, "Advanced", true);
 		if (showAdvanced) {
 			EditorGUI.indentLevel++;
-			EditorGUILayout.HelpBox("Hover your mouse over each property name to see information about its usage.", MessageType.Info);
-			GUILayout.Space(5);
 
 			if (serializedObject.isEditingMultipleObjects || operatingModeProp.enumValueIndex != (int)PortalBehaviourMode.PhysicsOnly) {
 				GUILayout.Space(10);
 				GUILayout.BeginVertical("box");
 				GUILayout.Space(5);
+				EditorGUILayout.HelpBox(
+					"Leave unset to automatically generate render textures at runtime.",
+					MessageType.Info);
+				if (IndentedButton(renderTextureDocs)) {
+					Application.OpenURL("https://github.com/aurycat/UdonPortals/wiki/Public-API-of-PortalBehaviour#viewtexl-viewtexr-rendertexture-field");
+				}
 				EditorGUILayout.PropertyField(viewTexLProp);
 				EditorGUILayout.PropertyField(viewTexRProp);
 				GUILayout.Space(5);
@@ -241,37 +285,6 @@ public class PortalBehaviourEditor : Editor
 		GUILayout.Space(5);
 
 		serializedObject.ApplyModifiedProperties();
-	}
-
-	void GenerateRenderTextures()
-	{
-		foreach(PortalBehaviour p in targets) {
-			if (p.viewTexL == null) {
-				p.viewTexL = GenerateOneRenderTexture(p.name + "-L");
-				EditorUtility.SetDirty(p);
-				PrefabUtility.RecordPrefabInstancePropertyModifications(p);
-			}
-			if (p.viewTexR == null) {
-				p.viewTexR = GenerateOneRenderTexture(p.name + "-R");
-				EditorUtility.SetDirty(p);
-				PrefabUtility.RecordPrefabInstancePropertyModifications(p);
-			}
-		}
-	}
-
-	RenderTexture GenerateOneRenderTexture(string name)
-	{
-		if (!AssetDatabase.IsValidFolder("Assets/PortalRenderTextures")) {
-			AssetDatabase.CreateFolder("Assets", "PortalRenderTextures");
-		}
-		// Create a render texture the same as "Create > Render Texture" would do
-		RenderTextureDescriptor desc = new RenderTextureDescriptor(256, 256, RenderTextureFormat.ARGB32, 24);
-		desc.sRGB = false;
-		RenderTexture tex = new RenderTexture(desc);
-		string path = "Assets/PortalRenderTextures/" + name + ".renderTexture";
-		path = AssetDatabase.GenerateUniqueAssetPath(path);
-		AssetDatabase.CreateAsset(tex, path);
-		return tex;
 	}
 
 	bool IndentedButton(GUIContent content)
