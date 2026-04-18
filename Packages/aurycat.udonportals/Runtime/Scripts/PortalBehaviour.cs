@@ -144,6 +144,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 	[HideInInspector]
 	[PublicAPI]
+#if !UDONPORTALS_MANUAL_SS
+	[Obsolete("Add UDONPORTALS_MANUAL_SS to Project Settings > Player > Scripting Define Symbols to enable manualStereoSeparation.")]
+#endif
 	public float manualStereoSeparation = 0f;
 
 	[Tooltip("See 'Public API of PortalBehaviour' wiki page on GitHub for info on this setting.")]
@@ -623,13 +626,15 @@ public class PortalBehaviour : UdonSharpBehaviour
 			Vector3 leftEyePos = VRCCameraSettings.GetEyePosition(Camera.StereoscopicEye.Left);
 			Vector3 rightEyePos = VRCCameraSettings.GetEyePosition(Camera.StereoscopicEye.Right);
 
-			if (manualStereoSeparation > 0.0f) {
-				Vector3 centerPos = leftEyePos*0.5f + rightEyePos*0.5f;
-				Vector3 dir = (leftEyePos - centerPos).normalized;
-				float ssHalf = manualStereoSeparation * 0.5f;
-				leftEyePos = centerPos + dir * ssHalf;
-				rightEyePos = centerPos - dir * ssHalf;
-			}
+			#if UDONPORTALS_MANUAL_SS
+				if (manualStereoSeparation > 0.0f) {
+					Vector3 centerPos = leftEyePos*0.5f + rightEyePos*0.5f;
+					Vector3 dir = (leftEyePos - centerPos).normalized;
+					float ssHalf = manualStereoSeparation * 0.5f;
+					leftEyePos = centerPos + dir * ssHalf;
+					rightEyePos = centerPos - dir * ssHalf;
+				}
+			#endif
 
 			portalCameraLTransform.SetPositionAndRotation(
 				leftEyePos,
