@@ -226,7 +226,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 	// Texture size at the previous frame
 	private int widthCache = 0;
 	private int heightCache = 0;
-	private bool texturesNeedRefresh;
 
 	// Properties to keep track of the player while they're within the
 	// portal trigger:
@@ -254,11 +253,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private bool propIDsInited;
 	private int propID_ViewTexL;
 	private int propID_ViewTexR;
-#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
 	private int propID_ScreenProjectionMatrix;
 	private int propID_ScreenViewMatrix;
 	private int propID_RenderOK;
-#endif
 
 
 #if UNITY_EDITOR
@@ -396,15 +393,18 @@ public class PortalBehaviour : UdonSharpBehaviour
 			 */
 
 			if (viewTexL == null) {
+				// Same depth and format as VRC Mirrors. Size will be updated later.
 				viewTexL = new RenderTexture(256, 256, 24, RenderTextureFormat.ARGBHalf, 1);
 				viewTexL.name = name + "-L";
 			}
 			if (inVR && (viewTexR == null || viewTexR == viewTexL)) {
+				// Copy the config of viewTexL.
 				viewTexR = new RenderTexture(viewTexL);
 				viewTexR.name = name + "-R";
 			}
 
-			texturesNeedRefresh = true;
+			widthCache = 0;
+			heightCache = 0;
 
 			/*
 			 * Configure portal cameras.
@@ -418,9 +418,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 			_UpdateLayerMask(_layerMask);
 
-			#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-				material.SetFloat(propID_RenderOK, 0);
-			#endif
+			material.SetFloat(propID_RenderOK, 0);
 			material.SetTexture(propID_ViewTexL, viewTexL);
 
 			if (inVR) {
@@ -550,7 +548,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 	[PublicAPI]
 	public void RefreshTextures()
 	{
-		texturesNeedRefresh = true;
+		// Force texture refresh
+		widthCache = 0;
+		heightCache = 0;
 	}
 
 	// Local vars within OnWillRenderObject, just placed here to avoid
@@ -597,22 +597,19 @@ public class PortalBehaviour : UdonSharpBehaviour
 		VRCCameraSettings screenCamera = VRCCameraSettings.ScreenCamera;
 		VRCCameraSettings.GetCurrentCamera(out VRCCameraSettings internalCamera, out Camera externalCamera);
 		if (internalCamera != screenCamera) {
-			#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-				material.SetFloat(propID_RenderOK, 0);
-			#endif
+			material.SetFloat(propID_RenderOK, 0);
 			return;
 		}
 
 		int w = screenCamera.PixelWidth;
 		int h = screenCamera.PixelHeight;
-		if (w != widthCache || h != heightCache || texturesNeedRefresh) {
+		if (w != widthCache || h != heightCache) {
 			widthCache = w;
 			heightCache = h;
 			_SetupTexture(viewTexL, portalCameraL);
 			if (inVR) {
 				_SetupTexture(viewTexR, portalCameraR);
 			}
-			texturesNeedRefresh = false;
 		}
 
 		// Move the virtual head to its appropriate position relative to the opposite portal.
@@ -643,18 +640,16 @@ public class PortalBehaviour : UdonSharpBehaviour
 				rightEyePos,
 				VRCCameraSettings.GetEyeRotation(Camera.StereoscopicEye.Right));
 		}
-		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-			// 3b. portalCameraL is now in the same position as, and so has the same
-			//     view matrix as, the (left eye of the) main screen camera. Capture
-			//     that view matrix and pass it to the shader. We only render the
-			//     portal once, for the main screen camera, so if any other cameras
-			//     (e.g. handheld photo camera, drone camera, stabilized camera) view
-			//     the portal, the shader can use this view matrix from the time of
-			//     rendering to approximate the portal surface for those other cameras.
-			//     Also, only the left eye view is needed since we assume all the other
-			//     cameras are not VR.
-			material.SetMatrix(propID_ScreenViewMatrix, portalCameraL.worldToCameraMatrix);
-		#endif
+		// 3b. portalCameraL is now in the same position as, and so has the same
+		//     view matrix as, the (left eye of the) main screen camera. Capture
+		//     that view matrix and pass it to the shader. We only render the
+		//     portal once, for the main screen camera, so if any other cameras
+		//     (e.g. handheld photo camera, drone camera, stabilized camera) view
+		//     the portal, the shader can use this view matrix from the time of
+		//     rendering to approximate the portal surface for those other cameras.
+		//     Also, only the left eye view is needed since we assume all the other
+		//     cameras are not VR.
+		material.SetMatrix(propID_ScreenViewMatrix, portalCameraL.worldToCameraMatrix);
 		// 4. Rotate the virtual head 180 degrees around the current portal,
 		//    which accounts for the fact that the virtual head looks "out of"
 		//    the partner portal. So we're looking from behind the portal now.
@@ -698,12 +693,10 @@ public class PortalBehaviour : UdonSharpBehaviour
 			portalCameraL.ResetProjectionMatrix();
 		}
 
-		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-			// Capture projection matrix used to render the portal and pass it to
-			// the shader. See above where the view matrix is passed to the shader
-			// for more info.
-			material.SetMatrix(propID_ScreenProjectionMatrix, portalCameraL.projectionMatrix);
-		#endif
+		// Capture projection matrix used to render the portal and pass it to
+		// the shader. See above where the view matrix is passed to the shader
+		// for more info.
+		material.SetMatrix(propID_ScreenProjectionMatrix, portalCameraL.projectionMatrix);
 
 		if (_useObliqueProjection) {
 			// Setup an oblique projection matrix for the portal cameras.
@@ -738,9 +731,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 			portalCameraR.Render();
 		}
 
-		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-			material.SetFloat(propID_RenderOK, 1);
-		#endif
+		material.SetFloat(propID_RenderOK, 1);
 
 	} /* OnWillRenderObject */
 
@@ -758,12 +749,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		} else if (inVR) {
 			if (!Utilities.IsValid(player) || player.isLocal) {
 				if (material != null) {
-					#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-						material.SetFloat(propID_RenderOK, 0);
-					#else
-						material.SetTexture(propID_ViewTexL, null);
-						material.SetTexture(propID_ViewTexR, null);
-					#endif
+					material.SetFloat(propID_RenderOK, 0);
 				}
 			}
 		}
@@ -1199,11 +1185,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 		}
 		propID_ViewTexL = VRCShader.PropertyToID("_ViewTexL");
 		propID_ViewTexR = VRCShader.PropertyToID("_ViewTexR");
-		#if UDONPORTALS_EXPERIMENTAL_RENDERING_FOR_NON_SCREEN_CAMERA
-			propID_ScreenProjectionMatrix = VRCShader.PropertyToID("_ScreenProjectionMatrix");
-			propID_ScreenViewMatrix = VRCShader.PropertyToID("_ScreenViewMatrix");
-			propID_RenderOK = VRCShader.PropertyToID("_RenderOK");
-		#endif
+		propID_ScreenProjectionMatrix = VRCShader.PropertyToID("_ScreenProjectionMatrix");
+		propID_ScreenViewMatrix = VRCShader.PropertyToID("_ScreenViewMatrix");
+		propID_RenderOK = VRCShader.PropertyToID("_RenderOK");
 		propIDsInited = true;
 	}
 
@@ -1234,7 +1218,9 @@ public class PortalBehaviour : UdonSharpBehaviour
 			return;
 		}
 		_textureResolution = val;
-		texturesNeedRefresh = true;
+		// Force texture refresh
+		widthCache = 0;
+		heightCache = 0;
 	}
 
 	// `partner` can't be changed to a property with a FieldChangeCallback without
