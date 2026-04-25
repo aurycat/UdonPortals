@@ -64,12 +64,16 @@ half4 frag(v2f i) : SV_Target
 {
 	if (!_RenderOK) {
 		// Render black if out of range, or if rendering opposite direction (w < 0)
-		// Square out-of-range would be `any(pos < 0 || pos > 1)` but I think
-		// circular out-of-range looks nicer.
 		float2 pos = i.screenPos.xy / i.screenPos.w;
+#define CIRCLE_CUTOUT 1 // Could be a shader keyword or something but hard to explain what it means and probably doesn't matter
+#if CIRCLE_CUTOUT
 		float2 d = abs(pos - 0.5);
 		float rad = dot(d,d)*4;
-		if (rad > 1 || i.screenPos.w < 0) {
+		bool outOfRange = rad > 1;
+#else // SQUARE_CUTOUT
+		bool outOfRange = any(pos < 0 || pos > 1);
+#endif
+		if (outOfRange || i.screenPos.w < 0) {
 			return half4(0,0,0,1);
 		}
 	}
