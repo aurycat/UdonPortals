@@ -265,18 +265,13 @@ PrefabInstance:
       objectReference: {fileID: 309392658}
     - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
         type: 3}
-      propertyPath: viewTexL
-      value: 
-      objectReference: {fileID: 8400000, guid: 150ec5beb17207a4e848da8a8b91146a, type: 2}
-    - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
-        type: 3}
-      propertyPath: viewTexR
-      value: 
-      objectReference: {fileID: 8400000, guid: c1b9f92f1a7b39747bb57a816540da56, type: 2}
-    - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
-        type: 3}
       propertyPath: momentumSnapping
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
+        type: 3}
+      propertyPath: hasPreV21RenderTextures
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
         type: 3}
@@ -370,6 +365,7 @@ MonoBehaviour:
   currentlyHeldBy: {fileID: 0}
   pickupable: 1
   proximity: 2
+  version: 0
 --- !u!54 &233739149
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -628,7 +624,7 @@ MonoBehaviour:
   AllowCollisionOwnershipTransfer: 1
   Reliable: 0
   _syncMethod: 1
-  serializedProgramAsset: {fileID: 11400000, guid: 249f596135adbb443881a65b408e5cce,
+  serializedProgramAsset: {fileID: 11400000, guid: 1bf5011db4fa63742a69429b6a69adc2,
     type: 2}
   programSource: {fileID: 11400000, guid: 98bb2a9cac3c3a8419b856ded5d99bcb, type: 2}
   serializedPublicVariablesBytesString: Ai8AAAAAATIAAABWAFIAQwAuAFUAZABvAG4ALgBDAG8AbQBtAG8AbgAuAFUAZABvAG4AVgBhAHIAaQBhAGIAbABlAFQAYQBiAGwAZQAsACAAVgBSAEMALgBVAGQAbwBuAC4AQwBvAG0AbQBvAG4AAAAAAAYBAAAAAAAAACcBBAAAAHQAeQBwAGUAAWgAAABTAHkAcwB0AGUAbQAuAEMAbwBsAGwAZQBjAHQAaQBvAG4AcwAuAEcAZQBuAGUAcgBpAGMALgBMAGkAcwB0AGAAMQBbAFsAVgBSAEMALgBVAGQAbwBuAC4AQwBvAG0AbQBvAG4ALgBJAG4AdABlAHIAZgBhAGMAZQBzAC4ASQBVAGQAbwBuAFYAYQByAGkAYQBiAGwAZQAsACAAVgBSAEMALgBVAGQAbwBuAC4AQwBvAG0AbQBvAG4AXQBdACwAIABtAHMAYwBvAHIAbABpAGIAAQEJAAAAVgBhAHIAaQBhAGIAbABlAHMALwEAAAABaAAAAFMAeQBzAHQAZQBtAC4AQwBvAGwAbABlAGMAdABpAG8AbgBzAC4ARwBlAG4AZQByAGkAYwAuAEwAaQBzAHQAYAAxAFsAWwBWAFIAQwAuAFUAZABvAG4ALgBDAG8AbQBtAG8AbgAuAEkAbgB0AGUAcgBmAGEAYwBlAHMALgBJAFUAZABvAG4AVgBhAHIAaQBhAGIAbABlACwAIABWAFIAQwAuAFUAZABvAG4ALgBDAG8AbQBtAG8AbgBdAF0ALAAgAG0AcwBjAG8AcgBsAGkAYgABAAAABgAAAAAAAAAABwUHBQ==
@@ -1307,6 +1303,7 @@ MonoBehaviour:
   currentlyHeldBy: {fileID: 0}
   pickupable: 1
   proximity: 2
+  version: 0
 --- !u!54 &1336317380
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -1737,18 +1734,13 @@ PrefabInstance:
       objectReference: {fileID: 1302214675}
     - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
         type: 3}
-      propertyPath: viewTexL
-      value: 
-      objectReference: {fileID: 8400000, guid: c307508eec9504549bdc0372cc06f8dd, type: 2}
-    - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
-        type: 3}
-      propertyPath: viewTexR
-      value: 
-      objectReference: {fileID: 8400000, guid: a425d5cfb63a1a74cb693957f9e9f17b, type: 2}
-    - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
-        type: 3}
       propertyPath: momentumSnapping
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
+        type: 3}
+      propertyPath: hasPreV21RenderTextures
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8598132326898580830, guid: b5ff06aa6547bd54dbdd0cd245a55641,
         type: 3}
@@ -1847,6 +1839,7 @@ MonoBehaviour:
   currentlyHeldBy: {fileID: 0}
   pickupable: 1
   proximity: 2
+  version: 0
 --- !u!54 &1578376592
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -2028,6 +2021,7 @@ MonoBehaviour:
   currentlyHeldBy: {fileID: 0}
   pickupable: 1
   proximity: 2
+  version: 0
 --- !u!54 &1671785627
 Rigidbody:
   m_ObjectHideFlags: 0
