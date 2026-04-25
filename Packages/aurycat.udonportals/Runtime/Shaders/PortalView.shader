@@ -21,7 +21,13 @@
 //                   objects, breaking MSAA, & requiring a real-time light in
 //                   the scene to force Unity to render _CDT.
 //  1.5 (2024-11-17) Don't render in handheld camera.
-//
+//  2.1 (2026-04-25) Split most code into cginc files to share between
+//                   PortalView and PortalViewDepth. Supported new rendering
+//                   method which makes looking at portals from non-screen
+//                   cameras look slightly better.
+
+
+
 // ============================================================================
 //  How it works
 //  (Very verbose so I remember how it works when I come back to it later...)

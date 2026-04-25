@@ -1,3 +1,5 @@
+// Shared between PortalView.shader and PortalViewNoDepth.shader
+
 #pragma vertex vert
 #pragma fragment frag
 #pragma multi_compile_shadowcaster

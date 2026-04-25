@@ -28,6 +28,15 @@
 //  2.0 (2025-07-11) Upgrade to using VRCCameraSettings API for getting camera info.
 //                   Some fields and properties that are no longer necessary have been
 //                   removed from PortalBehavior, and FOVDetector has been removed.
+//  2.1 (2026-04-25) Auto-generate RenderTextures at runtime. New rendering method
+//                   to make non-main-screen cameras render the portals a little
+//                   nicer (especially good for the VR smoothcam view, but still not
+//                   great for handheld camera). Parter preloading to avoid flicker.
+//                   Activate/deactivate-on-teleport feature. On-receive events. Put
+//                   manual stereo separation under #if to avoid unnecessary code in
+//                   hot code path. Fixed bug if two players go through a portal on
+//                   the same frame. Workaround for bug with AlignRoomWithSpawnPoint.
+//                   Documentation moved to GitHub wiki pages.
 
 using UdonSharp;
 using UnityEngine;
@@ -183,7 +192,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 // Don't wrap this in #if !UDONPORTALS_DISABLE_PARTNER_PRELOAD so the U# asset
 // file doesn't change when the macro is set. But disable "assigned but its value
-// is never used" warning, emitted when UDONPORTALS_DISABLE_PARTNER_PRELOAD is set. 
+// is never used" warning, emitted when UDONPORTALS_DISABLE_PARTNER_PRELOAD is set.
 #pragma warning disable 0414
 	// Initially true, set false after preloading once. Avoids unnecessary
 	// calls out to the partner portal. Reset to true if `partner` is changed.
@@ -763,7 +772,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		if (!player.isLocal) {
 			return;
 		}
-		
+
 		prevInFront = false;
 		trackingHeadInTrigger = false;
 		isHoloport = false;
@@ -869,7 +878,7 @@ public class PortalBehaviour : UdonSharpBehaviour
 		// Use AvatarRoot in VR due to a few bugs with using Origin-based teleporting.
 		// https://feedback.vrchat.com/udon/p/teleportto-alignroomwithspawnpoint-has-problems-if-theres-a-wall-between-the-des
 		// Using AvatarRoot also means the TeleportTo needs to use AlignPlayerWithSpawnPoint
-		// instead of AlignRoomWithSpawnPoint. 
+		// instead of AlignRoomWithSpawnPoint.
 		VRCPlayerApi.TrackingData trackingRoot =
 			inVR
 			? localPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.AvatarRoot)
