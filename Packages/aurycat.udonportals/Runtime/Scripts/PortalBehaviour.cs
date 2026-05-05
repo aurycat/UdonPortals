@@ -56,6 +56,14 @@ public enum PortalBehaviourMode
 	PhysicsOnly,
 }
 
+// Documentation at:
+// https://github.com/aurycat/UdonPortals/wiki/Public-API-of-PortalBehaviour#void-setmaterialmaterial-mat-portalbehaviourmaterialmode-mode
+public enum PortalBehaviourMaterialMode {
+	ApplyInstantiated,
+	ApplyDirect,
+	DontApply,
+}
+
 [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
 [HelpURL("https://github.com/aurycat/UdonPortals/wiki")]
 public class PortalBehaviour : UdonSharpBehaviour
@@ -226,9 +234,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private Camera dummyStereoCamera;
 
 	// Cached reference to the renderer and trigger collider on this object
-	private Renderer _renderer; // Use '_renderer' name to avoid warning about conflict with 'Component.renderer'.
-	                            // The warning says to use the 'new' keyword, but adding it causes a different
-	                            // warning saying that 'new' isn't necessary. So uh. Just give it a different name.
 	private Material material;
 	private Collider trigger;
 
@@ -320,17 +325,23 @@ public class PortalBehaviour : UdonSharpBehaviour
 
 		if (!_noVisuals) {
 			_InitShaderPropertyIDs();
-			_renderer = GetComponent<Renderer>();
-			if (_renderer != null) {
-				material = _renderer.material;
-				if (material != null) {
-					if(!material.HasProperty(propID_ViewTexL) || !material.HasProperty(propID_ViewTexR)) {
-						Debug.LogError($"Portal '{name}' is set to material '{material.name}' which does not have the _ViewTexL or _ViewTexR properties.");
+			Renderer renderer = GetComponent<Renderer>();
+			if (renderer != null) {
+				// If material is already set (e.g. from SetMaterial before enabling),
+				// don't try to override or validate.
+				// Even if material is already set, we still need to check for a Renderer,
+				// because a Renderer is required for OnWillRenderObject to run.
+				if (material == null) {
+					material = renderer.material;
+					if (material != null) {
+						if(!material.HasProperty(propID_ViewTexL) || !material.HasProperty(propID_ViewTexR)) {
+							Debug.LogError($"Portal '{name}' is set to material '{material.name}' which does not have the _ViewTexL or _ViewTexR properties.");
+							return;
+						}
+					} else {
+						Debug.LogError($"Portal '{name}' does not have a material set on its Renderer.");
 						return;
 					}
-				} else {
-					Debug.LogError($"Portal '{name}' does not have a material set on its Renderer.");
-					return;
 				}
 			} else {
 				Debug.LogError($"Portal '{name}' does not have a Renderer.");
@@ -499,7 +510,6 @@ public class PortalBehaviour : UdonSharpBehaviour
 		portalCameraL = null;
 		portalCameraR = null;
 		dummyStereoCamera = null;
-		_renderer = null;
 		trigger = null;
 		widthCache = 0;
 		heightCache = 0;
@@ -511,38 +521,46 @@ public class PortalBehaviour : UdonSharpBehaviour
 		inVR = false;
 	}
 
+	// U# apparently doesn't like function arguments that have default enum values,
+	// so just use an overload for the default mode instead.
+	[PublicAPI]
+	public void SetMaterial(Material newMaterial)
+	{
+		SetMaterial(newMaterial, PortalBehaviourMaterialMode.ApplyInstantiated);
+	}
+
 	/**
-	 * Call this to change the material being used by the portal. If the
-	 * material is changed on the renderer directly without calling this
-	 * function, the textures won't update properly until the Portal is
-	 * turned off and back on.
+	 * Documentation at:
+	 * https://github.com/aurycat/UdonPortals/wiki/Public-API-of-PortalBehaviour#void-setmaterialmaterial-mat-portalbehaviourmaterialmode-mode
 	 */
 	[PublicAPI]
-	public void SetMaterial(Material mat)
+	public void SetMaterial(Material newMaterial, PortalBehaviourMaterialMode mode)
 	{
 		if (_noVisuals) {
 			return;
-		} else if (mat == null) {
+		} else if (newMaterial == null) {
 			Debug.LogError($"Attempt to change portal '{name}' material to null.");
 			return;
 		}
 
 		_InitShaderPropertyIDs();
 
-		if (!mat.HasProperty(propID_ViewTexL) || !mat.HasProperty(propID_ViewTexR)) {
-			Debug.LogError($"Attempt to change portal '{name}' material to '{mat.name}' which does not have the _ViewTexL or _ViewTexR properties.");
+		if (!newMaterial.HasProperty(propID_ViewTexL) || !newMaterial.HasProperty(propID_ViewTexR)) {
+			Debug.LogError($"Attempt to change portal '{name}' material to '{newMaterial.name}' which does not have the _ViewTexL or _ViewTexR properties.");
 			return;
-		} else if (_renderer == null) {
-			// The portal might not have been enabled yet
-			_renderer = GetComponent<Renderer>();
-			if (_renderer == null) {
-				Debug.LogError($"Attempt to change portal '{name}' material to '{mat.name}', but portal has no Renderer.");
-				return;
-			}
 		}
 
-		_renderer.material = mat;
-		material = _renderer.material;
+		material = newMaterial;
+
+		if (mode != PortalBehaviourMaterialMode.DontApply) {
+			Renderer renderer = GetComponent<Renderer>();
+			if (renderer != null) {
+				renderer.material = material;
+				if (mode == PortalBehaviourMaterialMode.ApplyInstantiated) {
+					material = renderer.material;
+				}
+			}
+		}
 
 		material.SetTexture(propID_ViewTexL, viewTexL);
 		if (inVR) {
