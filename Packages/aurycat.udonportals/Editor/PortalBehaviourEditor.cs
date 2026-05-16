@@ -29,6 +29,8 @@ public class PortalBehaviourEditor : Editor
 	SerializedProperty portalCameraPrefabProp;
 	SerializedProperty portalCameraRootProp;
 
+	SerializedProperty hasPreV21RenderTexturesProp;
+
 	GUIContent renderTextureDocs;
 	GUIContent useObliqueProjectionDocs;
 
@@ -57,6 +59,8 @@ public class PortalBehaviourEditor : Editor
 
 		portalCameraPrefabProp = serializedObject.FindProperty("portalCameraPrefab");
 		portalCameraRootProp = serializedObject.FindProperty("portalCameraRoot");
+
+		hasPreV21RenderTexturesProp = serializedObject.FindProperty("hasPreV21RenderTextures");
 
 		renderTextureDocs = new GUIContent("View Tex Documentation");
 		useObliqueProjectionDocs = new GUIContent("Oblique Projection Documentation");
@@ -90,53 +94,7 @@ public class PortalBehaviourEditor : Editor
 			}
 		}
 
-		bool rtwarning = false;
-		foreach (PortalBehaviour p in targets) {
-			if (p.hasPreV21RenderTextures) {
-				if (p.viewTexL == null && p.viewTexR == null) {
-					p.hasPreV21RenderTextures = false;
-				}
-				else if (!rtwarning) {
-					rtwarning = true;
-					GUILayout.Space(5);
-					EditorGUILayout.HelpBox("Starting with UdonPortals v2.1, a portal's render textures are automatically generated at runtime. Unless you need a customized texture format, please clear the 'View Tex L' and 'View Tex R' fields in the Advanced section below. After clearing the fields, you may delete the RenderTexture assets from your project.", MessageType.Warning);
-					if (GUILayout.Button("Automatically clear the fields for me")) {
-						Undo.RegisterCompleteObjectUndo(targets, "Clear render textures on portal");
-						foreach (PortalBehaviour p2 in targets) {
-							p2.viewTexL = null;
-							p2.viewTexR = null;
-							p2.hasPreV21RenderTextures = false;
-						}
-					}
-					if (GUILayout.Button("Automatically clear fields & delete the assets (no undo)")) {
-						var paths = new List<string>();
-						var outFailedPaths = new List<string>();
-						foreach (PortalBehaviour p2 in targets) {
-							if (p2.viewTexL != null) {
-								paths.Add(AssetDatabase.GetAssetPath(p2.viewTexL));
-							}
-							if (p2.viewTexR != null) {
-								paths.Add(AssetDatabase.GetAssetPath(p2.viewTexR));
-							}
-							p2.viewTexL = null;
-							p2.viewTexR = null;
-							p2.hasPreV21RenderTextures = false;
-						}
-						AssetDatabase.MoveAssetsToTrash(paths.ToArray(), outFailedPaths);
-					}
-					if (GUILayout.Button("Silence warning")) {
-						Undo.RegisterCompleteObjectUndo(targets, "Silence render texture warning");
-						foreach (PortalBehaviour p2 in targets) {
-							p2.hasPreV21RenderTextures = false;
-						}
-					}
-					GUILayout.Space(10);
-					GUILayout.BeginVertical();
-					EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
-					GUILayout.EndVertical();
-				}
-			}
-		}
+		HandleUpdatingToV21RenderTextures();
 
 		GUILayout.Space(5);
 
@@ -289,5 +247,93 @@ public class PortalBehaviourEditor : Editor
 	{
 		Rect r = EditorGUI.IndentedRect(GUILayoutUtility.GetRect(content, GUI.skin.button));
 		return GUI.Button(r, content, GUI.skin.button);
+	}
+
+	private void HandleUpdatingToV21RenderTextures()
+	{
+		// Early exit if none of the potentially multiple objects have the bool set
+		if (!hasPreV21RenderTexturesProp.boolValue) {
+			return;
+		}
+
+		serializedObject.ApplyModifiedProperties();
+
+		// Make new SerializedObject/SerializedProperty to check/modify
+		// each object individually, since the variable is private
+		SerializedObject[] perTargetSOs = new SerializedObject[targets.Length];
+		SerializedProperty[] perTargetPreV21Prop = new SerializedProperty[targets.Length];
+
+		bool showWarning = false;
+		for (int i = 0; i < targets.Length; i++) {
+			PortalBehaviour p = targets[i] as PortalBehaviour;
+			perTargetSOs[i] = new SerializedObject(targets[i]);
+			perTargetPreV21Prop[i] = perTargetSOs[i].FindProperty("hasPreV21RenderTextures");
+			if (perTargetPreV21Prop[i].boolValue) {
+				if (p.viewTexL == null && p.viewTexR == null) {
+					// Clear preV21 on portals that don't have any textures set
+					perTargetPreV21Prop[i].boolValue = false;
+					perTargetSOs[i].ApplyModifiedProperties();
+				}
+				else {
+					showWarning = true;
+				}
+			}
+		}
+
+		if (showWarning) {
+			GUILayout.Space(5);
+			EditorGUILayout.HelpBox("Starting with UdonPortals v2.1, a portal's render textures are automatically generated at runtime. Unless you need a customized texture format, please clear the 'View Tex L' and 'View Tex R' fields in the Advanced section below. After clearing the fields, you may delete the RenderTexture assets from your project.", MessageType.Warning);
+
+			bool b1 = GUILayout.Button("Automatically clear the fields for me");
+			bool b2 = GUILayout.Button("Automatically clear fields & delete the assets (no undo)");
+			bool b3 = GUILayout.Button("Silence warning");
+
+			if (b1) {
+				Undo.RegisterCompleteObjectUndo(targets, "Clear render textures on portal");
+			}
+			else if (b2) {
+				var paths = new List<string>();
+				var outFailedPaths = new List<string>();
+				foreach(PortalBehaviour p2 in targets) {
+					if (p2.viewTexL != null) {
+						paths.Add(AssetDatabase.GetAssetPath(p2.viewTexL));
+					}
+					if (p2.viewTexR != null) {
+						paths.Add(AssetDatabase.GetAssetPath(p2.viewTexR));
+					}
+				}
+				AssetDatabase.MoveAssetsToTrash(paths.ToArray(), outFailedPaths);
+			}
+			else if (b3) {
+				Undo.RegisterCompleteObjectUndo(targets, "Silence render texture warning");
+			}
+
+			if (b1 || b2) {
+				for (int i = 0; i < targets.Length; i++) {
+					if (perTargetPreV21Prop[i].boolValue) {
+						PortalBehaviour p = targets[i] as PortalBehaviour;
+						p.viewTexL = null;
+						p.viewTexR = null;
+					}
+				}
+			}
+
+			if (b1 || b2 || b3) {
+				for (int i = 0; i < targets.Length; i++) {
+					perTargetSOs[i].Update();
+					if (perTargetPreV21Prop[i].boolValue) {
+						perTargetPreV21Prop[i].boolValue = false;
+						perTargetSOs[i].ApplyModifiedProperties();
+					}
+				}
+			}
+
+			GUILayout.Space(10);
+			GUILayout.BeginVertical();
+			EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
+			GUILayout.EndVertical();
+		}
+
+		serializedObject.Update();
 	}
 }

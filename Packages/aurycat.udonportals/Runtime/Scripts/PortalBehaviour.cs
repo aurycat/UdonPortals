@@ -271,12 +271,14 @@ public class PortalBehaviour : UdonSharpBehaviour
 	private int propID_ScreenViewMatrix;
 	private int propID_RenderOK;
 
-
-#if UNITY_EDITOR
 	// For the v2.0 -> v2.1 render texture warning.
-	// Set to false by the editor script once viewTexL and viewTexR have been cleared.
-	[HideInInspector] public bool hasPreV21RenderTextures = true;
+	// Set to false by the editor script (via SerializedProperty) once viewTexL and viewTexR have been cleared.
+	// U# does not like it when a variable is inside a UNITY_EDITOR && !COMPILER_UDONSHARP macro.
+#pragma warning disable 0414
+	[SerializeField] private bool hasPreV21RenderTextures = true;
+#pragma warning restore 0414
 
+#if UNITY_EDITOR && !COMPILER_UDONSHARP
 	void Reset()
 	{
 		activatePartnerOnTeleport = true; // Added in v2.1 -- disabled by default for backwards compatability, but enable it for new portals.
