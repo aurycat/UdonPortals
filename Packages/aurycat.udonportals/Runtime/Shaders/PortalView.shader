@@ -25,6 +25,7 @@
 //                   PortalView and PortalViewDepth. Supported new rendering
 //                   method which makes looking at portals from non-screen
 //                   cameras look slightly better.
+//  2.2 (2026-10-25) Use #include_with_pragmas for Unity 6000 compatibility.
 
 
 
@@ -120,7 +121,7 @@ Shader "Aurycat/PortalView"
 			}
 
 			CGPROGRAM
-			#include "Common/PortalViewMain.cginc"
+			#include_with_pragmas "Common/PortalViewMain.cginc"
 			ENDCG
 		}
 
@@ -212,7 +213,7 @@ Shader "Aurycat/PortalView"
 			Tags { "LightMode"="ShadowCaster" }
 
 			CGPROGRAM
-			#include "Common/PortalViewShadow.cginc"
+			#include_with_pragmas "Common/PortalViewShadow.cginc"
 			ENDCG
 		}
 	}

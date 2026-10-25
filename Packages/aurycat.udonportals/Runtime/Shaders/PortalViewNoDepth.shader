@@ -25,7 +25,7 @@ Shader "Aurycat/PortalViewNoDepth"
 		Pass
 		{
 			CGPROGRAM
-			#include "Common/PortalViewMain.cginc"
+			#include_with_pragmas "Common/PortalViewMain.cginc"
 			ENDCG
 		}
 
@@ -34,7 +34,7 @@ Shader "Aurycat/PortalViewNoDepth"
 			Tags { "LightMode"="ShadowCaster" }
 
 			CGPROGRAM
-			#include "Common/PortalViewShadow.cginc"
+			#include_with_pragmas "Common/PortalViewShadow.cginc"
 			ENDCG
 		}
 	}

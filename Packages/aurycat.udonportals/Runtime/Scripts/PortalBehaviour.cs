@@ -37,6 +37,7 @@
 //                   hot code path. Fixed bug if two players go through a portal on
 //                   the same frame. Workaround for bug with AlignRoomWithSpawnPoint.
 //                   Documentation moved to GitHub wiki pages.
+//  2.2 (2026-10-25) Support Unity 6000 by using Rigidbody.linearVelocity.
 
 using UdonSharp;
 using UnityEngine;
@@ -1147,7 +1148,11 @@ public class PortalBehaviour : UdonSharpBehaviour
 			Quaternion rotDiff = partner.rotation * Quaternion.Inverse(transform.rotation);
 			destRotation = partner180 * rotDiff * body.rotation;
 
-			Vector3 localVel = transform.InverseTransformDirection(body.velocity);
+			#if UNITY_6000_0_OR_NEWER
+				Vector3 localVel = transform.InverseTransformDirection(body.linearVelocity);
+			#else
+				Vector3 localVel = transform.InverseTransformDirection(body.velocity);
+			#endif
 			destVelocity = partner180 * partner.TransformDirection(localVel);
 
 			// Inform others
@@ -1163,7 +1168,11 @@ public class PortalBehaviour : UdonSharpBehaviour
 			// Do teleport
 			body.position = destPosition;
 			body.rotation = destRotation;
-			body.velocity = destVelocity;
+			#if UNITY_6000_0_OR_NEWER
+				body.linearVelocity = destVelocity;
+			#else
+				body.velocity = destVelocity;
+			#endif
 
 			// Object is now somewhere else, treat it as if it has exited the
 			// trigger and clear prevBody to make room for other objects. If
